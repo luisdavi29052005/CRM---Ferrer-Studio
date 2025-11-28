@@ -141,58 +141,64 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ chats, leads, apifyLea
                                                 layout
                                                 initial={{
                                                     opacity: 0,
-                                                    x: isRight ? 100 : isLeft ? -100 : 0,
+                                                    x: isRight ? 120 : isLeft ? -120 : 0,
                                                     scale: 0.8,
                                                     zIndex: 0
                                                 }}
                                                 animate={{
-                                                    opacity: isCenter ? 1 : 0.4,
-                                                    x: isCenter ? 0 : isLeft ? '-85%' : '85%',
-                                                    scale: isCenter ? 1.1 : 0.85,
+                                                    opacity: isCenter ? 1 : 0.3,
+                                                    x: isCenter ? 0 : isLeft ? '-110%' : '110%', // Push further out to avoid overlap
+                                                    scale: isCenter ? 1.2 : 0.7, // More contrast in size
                                                     zIndex: isCenter ? 10 : 1,
-                                                    filter: isCenter ? 'blur(0px)' : 'blur(1px)'
+                                                    filter: isCenter ? 'blur(0px)' : 'blur(2px)'
                                                 }}
                                                 exit={{
                                                     opacity: 0,
-                                                    x: isLeft ? -150 : 150, // Exit further out
-                                                    scale: 0.7,
+                                                    x: isLeft ? -200 : 200, // Exit further out
+                                                    scale: 0.5,
                                                     zIndex: 0
                                                 }}
                                                 transition={{
-                                                    duration: 0.6,
-                                                    ease: [0.32, 0.72, 0, 1] // Custom ease for "stylish" feel
+                                                    duration: 0.5,
+                                                    ease: "easeInOut"
                                                 }}
                                                 onClick={() => {
+                                                    // Pass the ID that matches what Chat.tsx expects (chat_id, phone, or id)
                                                     onSelectChat((item as any).chat_id || (item as any).phone || item.id);
                                                 }}
-                                                className={`absolute flex flex-col items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors w-[140px] ${isCenter ? 'bg-white/[0.03] border border-white/10 shadow-xl shadow-black/20' : ''}`}
+                                                className={`absolute flex flex-col items-center gap-3 p-2 rounded-xl cursor-pointer transition-colors w-[120px]`}
                                                 style={{
                                                     left: '50%',
-                                                    marginLeft: '-70px', // Half of width to center absolute element
+                                                    marginLeft: '-60px', // Half of width (120px) to center absolute element
                                                 }}
                                             >
-                                                <div className={`rounded-full flex items-center justify-center text-lg font-bold border transition-all shrink-0 overflow-hidden relative ${isCenter ? 'w-16 h-16 bg-zinc-800 text-bronze-500 border-bronze-500/30' : 'w-12 h-12 bg-zinc-900 text-zinc-600 border-white/5'}`}>
+                                                {/* Avatar - No Box, just the image/circle */}
+                                                <div className={`rounded-full flex items-center justify-center text-lg font-bold transition-all shrink-0 overflow-hidden relative ${isCenter ? 'w-20 h-20 shadow-2xl shadow-black/50 ring-2 ring-bronze-500/50' : 'w-12 h-12 opacity-50 grayscale'}`}>
                                                     {(item as any).avatar_url ? (
                                                         <img src={(item as any).avatar_url} alt={(item as any).name} className="w-full h-full object-cover" />
                                                     ) : (
-                                                        <span>{((item as any).title || (item as any).name || '?').charAt(0)}</span>
+                                                        <div className="w-full h-full bg-zinc-800 flex items-center justify-center text-zinc-500">
+                                                            <span>{((item as any).title || (item as any).name || '?').charAt(0)}</span>
+                                                        </div>
                                                     )}
 
                                                     {/* Hover Overlay with Chat Icon - Only for Center */}
                                                     {isCenter && (
-                                                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                                                            <MessageSquare size={20} className="text-white" />
+                                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                                            <MessageSquare size={24} className="text-white drop-shadow-lg" />
                                                         </div>
                                                     )}
                                                 </div>
 
                                                 <div className="flex flex-col items-center w-full">
-                                                    <h3 className={`font-bold transition-colors truncate w-full text-center ${isCenter ? 'text-sm text-zinc-100' : 'text-xs text-zinc-500'}`}>
+                                                    <h3 className={`font-bold transition-all truncate w-full text-center ${isCenter ? 'text-sm text-zinc-100 mt-2' : 'text-[10px] text-zinc-600'}`}>
                                                         {(item as any).title || (item as any).name}
                                                     </h3>
-                                                    <p className={`truncate w-full text-center transition-colors ${isCenter ? 'text-[10px] text-zinc-400' : 'text-[9px] text-zinc-700'}`}>
-                                                        {(item as any).business || (item as any).category || 'Lead'}
-                                                    </p>
+                                                    {isCenter && (
+                                                        <p className="truncate w-full text-center text-[10px] text-zinc-400">
+                                                            {(item as any).business || (item as any).category || 'Lead'}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </motion.div>
                                         );

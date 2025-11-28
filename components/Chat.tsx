@@ -101,6 +101,44 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
         unreadCount: 0,
         lead: lead
       };
+    } else if (apifyLeads && apifyLeads.length > 0) {
+      // Check Apify Leads
+      const apifyLead = apifyLeads.find(l =>
+        l.chat_id === selectedChatId ||
+        l.phone === selectedChatId ||
+        l.id === selectedChatId
+      );
+
+      if (apifyLead) {
+        activeChat = {
+          id: 'temp-apify',
+          chatID: apifyLead.chat_id || apifyLead.phone || apifyLead.id, // Best effort chat ID
+          push_name: apifyLead.title || apifyLead.name || apifyLead.phone,
+          last_text: '',
+          last_from_me: true,
+          last_timestamp: Date.now(),
+          status: 'sent',
+          unreadCount: 0,
+          // We don't have a full 'Lead' object yet, but we can construct a partial one or handle it
+          // For now, let's cast it or create a temp lead object to satisfy the type if needed, 
+          // or just leave lead undefined if the UI handles it. 
+          // ChatWindow expects activeChat.lead for some things, but might be optional.
+          // Let's create a temp lead from Apify data
+          lead: {
+            id: apifyLead.id,
+            created_at: new Date().toISOString(),
+            user_id: 'temp',
+            name: apifyLead.title || apifyLead.name || 'Unknown',
+            phone: apifyLead.phone,
+            business: apifyLead.category,
+            status: 'New',
+            temperature: 'Cold',
+            source: 'Apify',
+            chat_id: apifyLead.chat_id || apifyLead.phone,
+            avatar_url: apifyLead.avatar_url
+          } as Lead
+        };
+      }
     }
   }
 
