@@ -666,6 +666,7 @@ const App = () => {
                         <Chat
                           chats={wahaChats}
                           leads={leads}
+                          apifyLeads={apifyLeads}
                           initialChatId={selectedLeadForChat}
                           initialLead={selectedLead}
                           key={selectedLeadForChat}

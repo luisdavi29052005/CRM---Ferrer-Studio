@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Lead, Message, WahaChat } from '../types';
+import { Lead, Message, WahaChat, ApifyLead } from '../types';
 import { fetchMessages, sendMessage, checkWahaStatus, fetchWahaProfile, startWahaSession, getWahaScreenshot } from '../services/supabaseService';
 import { ChatSidebar } from './chat/ChatSidebar';
 import { ChatWindow } from './chat/ChatWindow';
@@ -11,12 +11,13 @@ import { Smartphone, RefreshCw, MessageSquare, Loader2, AlertCircle, CheckCircle
 interface ChatProps {
   chats: WahaChat[];
   leads: Lead[];
+  apifyLeads?: ApifyLead[];
   initialChatId?: string;
   initialLead?: Lead;
   onConnectClick?: () => void;
 }
 
-export const Chat: React.FC<ChatProps> = ({ chats, leads, initialChatId, initialLead, onConnectClick }) => {
+export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initialChatId, initialLead, onConnectClick }) => {
   const { t } = useTranslation();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(initialChatId || (chats[0]?.chatID ?? null));
   const [messages, setMessages] = useState<Message[]>([]);
@@ -294,6 +295,7 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, initialChatId, initial
           selectedChatId={selectedChatId}
           onSelectChat={setSelectedChatId}
           wahaProfile={wahaProfile}
+          apifyLeads={apifyLeads}
         />
       </div>
 

@@ -1,17 +1,19 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Plus, MoreVertical, Check, CheckCheck, MessageSquare } from 'lucide-react';
-import { WahaChat, Lead } from '../../types';
+import { motion, AnimatePresence } from 'framer-motion';
+import { WahaChat, Lead, ApifyLead } from '../../types';
 
 interface ChatSidebarProps {
     chats: (WahaChat & { lead?: Lead })[];
     leads: Lead[];
+    apifyLeads?: ApifyLead[];
     selectedChatId: string | null;
     onSelectChat: (chatId: string) => void;
     wahaProfile: { id: string, name: string, picture: string } | null;
 }
 
-export const ChatSidebar: React.FC<ChatSidebarProps> = ({ chats, leads, selectedChatId, onSelectChat, wahaProfile }) => {
+export const ChatSidebar: React.FC<ChatSidebarProps> = ({ chats, leads, apifyLeads = [], selectedChatId, onSelectChat, wahaProfile }) => {
     const { t } = useTranslation();
     const [searchTerm, setSearchTerm] = useState('');
     const [currentRecommendationIndex, setCurrentRecommendationIndex] = useState(0);
@@ -27,13 +29,16 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ chats, leads, selected
             lead.business?.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
+    // Use Apify leads for recommendations if available, otherwise fallback to suggested CRM leads
+    const recommendationSource = apifyLeads.length > 0 ? apifyLeads : suggestedLeads;
+
     React.useEffect(() => {
-        if (suggestedLeads.length === 0) return;
+        if (recommendationSource.length === 0) return;
         const interval = setInterval(() => {
-            setCurrentRecommendationIndex((prev) => (prev + 1) % suggestedLeads.length);
+            setCurrentRecommendationIndex((prev) => (prev + 1) % recommendationSource.length);
         }, 3000);
         return () => clearInterval(interval);
-    }, [suggestedLeads.length]);
+    }, [recommendationSource.length]);
 
     const formatTime = (timestamp: number) => {
         return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -95,7 +100,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ chats, leads, selected
 
             {/* Chat List - Table Row Style */}
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-                {filteredChats.length === 0 && suggestedLeads.length === 0 ? (
+                {filteredChats.length === 0 && recommendationSource.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-64 text-center p-6">
                         <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center mb-4 border border-white/5">
                             <MessageSquare size={24} className="text-zinc-600" />
@@ -103,34 +108,96 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ chats, leads, selected
                         <p className="text-zinc-500 text-sm mb-2">{t('chat.no_conversations')}</p>
                         <p className="text-xs text-zinc-600 max-w-[200px]">Start a new conversation with one of your leads.</p>
                     </div>
-                ) : filteredChats.length === 0 && suggestedLeads.length > 0 ? (
+                ) : filteredChats.length === 0 && recommendationSource.length > 0 ? (
                     <div className="flex flex-col h-full">
-                        {/* Recommended Leads Carousel */}
-                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                            <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-6">Suggested Contacts</p>
+                        {/* Recommended Leads Carousel - Focused Horizontal List */}
+                        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center overflow-hidden">
+                            <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-8">
+                                {apifyLeads.length > 0 ? 'Comece a conversar' : 'Suggested Contacts'}
+                            </p>
 
-                            <div className="relative w-full max-w-[240px] aspect-square bg-zinc-900/30 rounded-2xl border border-white/5 p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-900/50 transition-all group"
-                                onClick={() => onSelectChat(suggestedLeads[currentRecommendationIndex].chat_id)}>
-                                <div className="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center text-2xl font-bold text-zinc-500 border border-white/10 mb-4 group-hover:scale-110 transition-transform duration-300">
-                                    {suggestedLeads[currentRecommendationIndex].avatar_url ? (
-                                        <img src={suggestedLeads[currentRecommendationIndex].avatar_url} alt={suggestedLeads[currentRecommendationIndex].name} className="w-full h-full object-cover rounded-full" />
-                                    ) : (
-                                        <span>{suggestedLeads[currentRecommendationIndex].name.charAt(0)}</span>
-                                    )}
-                                </div>
-                                <h3 className="text-lg font-bold text-zinc-200 mb-1">{suggestedLeads[currentRecommendationIndex].name}</h3>
-                                <p className="text-sm text-zinc-500 mb-4">{suggestedLeads[currentRecommendationIndex].business}</p>
-                                <span className="text-xs font-medium text-bronze-500 group-hover:text-bronze-400 transition-colors">Click to chat</span>
+                            {apifyLeads.length > 0 && (
+                                <p className="text-xs text-zinc-500 mb-8 -mt-6">
+                                    Converse com seus leads ({apifyLeads.length})
+                                </p>
+                            )}
 
-                                {/* Carousel Indicators */}
-                                <div className="absolute bottom-4 flex gap-1.5">
-                                    {suggestedLeads.slice(0, 5).map((_, idx) => (
-                                        <div
-                                            key={idx}
-                                            className={`w-1.5 h-1.5 rounded-full transition-all ${idx === (currentRecommendationIndex % 5) ? 'bg-bronze-500 w-3' : 'bg-zinc-800'}`}
-                                        ></div>
-                                    ))}
-                                </div>
+                            <div className="w-full relative h-[180px] flex items-center justify-center">
+                                <AnimatePresence initial={false} mode="popLayout">
+                                    {[-1, 0, 1].map((offset) => {
+                                        // Calculate index correctly handling negative numbers for modulo
+                                        const index = (currentRecommendationIndex + offset + recommendationSource.length) % recommendationSource.length;
+                                        const item = recommendationSource[index];
+                                        if (!item) return null;
+
+                                        // Determine position styles based on offset
+                                        const isCenter = offset === 0;
+                                        const isLeft = offset === -1;
+                                        const isRight = offset === 1;
+
+                                        return (
+                                            <motion.div
+                                                key={`${(item as any).id || index}`}
+                                                layout
+                                                initial={{
+                                                    opacity: 0,
+                                                    x: isRight ? 100 : isLeft ? -100 : 0,
+                                                    scale: 0.8,
+                                                    zIndex: 0
+                                                }}
+                                                animate={{
+                                                    opacity: isCenter ? 1 : 0.4,
+                                                    x: isCenter ? 0 : isLeft ? '-85%' : '85%',
+                                                    scale: isCenter ? 1.1 : 0.85,
+                                                    zIndex: isCenter ? 10 : 1,
+                                                    filter: isCenter ? 'blur(0px)' : 'blur(1px)'
+                                                }}
+                                                exit={{
+                                                    opacity: 0,
+                                                    x: isLeft ? -150 : 150, // Exit further out
+                                                    scale: 0.7,
+                                                    zIndex: 0
+                                                }}
+                                                transition={{
+                                                    duration: 0.6,
+                                                    ease: [0.32, 0.72, 0, 1] // Custom ease for "stylish" feel
+                                                }}
+                                                onClick={() => {
+                                                    onSelectChat((item as any).chat_id || (item as any).phone || item.id);
+                                                }}
+                                                className={`absolute flex flex-col items-center gap-3 p-4 rounded-xl cursor-pointer transition-colors w-[140px] ${isCenter ? 'bg-white/[0.03] border border-white/10 shadow-xl shadow-black/20' : ''}`}
+                                                style={{
+                                                    left: '50%',
+                                                    marginLeft: '-70px', // Half of width to center absolute element
+                                                }}
+                                            >
+                                                <div className={`rounded-full flex items-center justify-center text-lg font-bold border transition-all shrink-0 overflow-hidden relative ${isCenter ? 'w-16 h-16 bg-zinc-800 text-bronze-500 border-bronze-500/30' : 'w-12 h-12 bg-zinc-900 text-zinc-600 border-white/5'}`}>
+                                                    {(item as any).avatar_url ? (
+                                                        <img src={(item as any).avatar_url} alt={(item as any).name} className="w-full h-full object-cover" />
+                                                    ) : (
+                                                        <span>{((item as any).title || (item as any).name || '?').charAt(0)}</span>
+                                                    )}
+
+                                                    {/* Hover Overlay with Chat Icon - Only for Center */}
+                                                    {isCenter && (
+                                                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                                                            <MessageSquare size={20} className="text-white" />
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex flex-col items-center w-full">
+                                                    <h3 className={`font-bold transition-colors truncate w-full text-center ${isCenter ? 'text-sm text-zinc-100' : 'text-xs text-zinc-500'}`}>
+                                                        {(item as any).title || (item as any).name}
+                                                    </h3>
+                                                    <p className={`truncate w-full text-center transition-colors ${isCenter ? 'text-[10px] text-zinc-400' : 'text-[9px] text-zinc-700'}`}>
+                                                        {(item as any).business || (item as any).category || 'Lead'}
+                                                    </p>
+                                                </div>
+                                            </motion.div>
+                                        );
+                                    })}
+                                </AnimatePresence>
                             </div>
                         </div>
                     </div>
