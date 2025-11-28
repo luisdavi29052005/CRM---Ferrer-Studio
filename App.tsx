@@ -9,7 +9,6 @@ import { Chat } from './components/Chat';
 import { ApifyImports } from './components/ApifyImports';
 import { Automation } from './components/Automation';
 import { UserManagement } from './components/UserManagement';
-import { QRCodeModal } from './components/QRCodeModal';
 import { Lead, ApifyLead, WahaChat, AutomationFlow, ActivityItem } from './types';
 import { fetchLeads, fetchApifyLeads, fetchWahaChats, fetchAutomations, authActions, fetchChartData, checkWahaStatus, updateProfile, fetchRecentActivity } from './services/supabaseService';
 import { supabase } from './supabaseClient';
@@ -692,10 +691,6 @@ const App = () => {
         )}
       </AnimatePresence>
 
-      <QRCodeModal
-        isOpen={isQRModalOpen}
-        onClose={() => setIsQRModalOpen(false)}
-      />
     </>
   );
 };
