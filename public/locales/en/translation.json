@@ -1,0 +1,203 @@
+{
+    "common": {
+        "save": "Save",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "edit": "Edit",
+        "search": "Search...",
+        "loading": "Loading...",
+        "success": "Success",
+        "error": "Error",
+        "actions": "Actions",
+        "status": "Status",
+        "date": "Date",
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "role": "Role",
+        "view_profile": "View Profile",
+        "account_settings": "Account Settings",
+        "sign_out": "Sign Out",
+        "team_management": "Team Management",
+        "filter": "Filter"
+    },
+    "sidebar": {
+        "dashboard": "Dashboard",
+        "leads": "Leads",
+        "chat": "Chat",
+        "imports": "Imports",
+        "automation": "Automation",
+        "team": "Team",
+        "logout": "Logout",
+        "system_status": "System Status",
+        "waha_api": "WAHA API",
+        "n8n_workflow": "n8n Workflow",
+        "online": "Online",
+        "active": "Active"
+    },
+    "header": {
+        "overview": "Overview",
+        "whatsapp_connected": "WhatsApp Connected",
+        "whatsapp_starting": "Starting...",
+        "whatsapp_disconnected": "Whatsapp Disconnected"
+    },
+    "pending": {
+        "title": "Access Pending",
+        "message": "Your account is waiting for administrator approval. You will be notified once your access is granted.",
+        "sign_out_button": "Sign Out"
+    },
+    "login": {
+        "title": "Welcome back",
+        "subtitle": "Sign in to your account to continue",
+        "email_label": "Email Address",
+        "email_placeholder": "name@company.com",
+        "password_label": "Password",
+        "password_placeholder": "Enter your password",
+        "sign_in": "Sign In",
+        "loading": "Signing in...",
+        "or_continue_with": "Or continue with",
+        "google_button": "Google",
+        "terms_prefix": "By signing in, you agree to our",
+        "terms_link": "Terms of Service"
+    },
+    "dashboard": {
+        "title": "Dashboard",
+        "subtitle": "Overview of your performance",
+        "total_leads": "Total Leads",
+        "active_chats": "Active Chats",
+        "conversion_rate": "Conversion Rate",
+        "revenue": "Revenue",
+        "pipeline_value": "Pipeline Value",
+        "closed_revenue": "Closed Revenue",
+        "recent_activity": "Recent Activity",
+        "view_all": "View All",
+        "no_activity": "No recent activity"
+    },
+    "leads": {
+        "title": "Leads Management",
+        "subtitle": "Track and manage your potential customers",
+        "total_leads": "Total Leads",
+        "all_leads": "All Leads",
+        "add_lead": "Add Lead",
+        "search_placeholder": "Search leads...",
+        "table": {
+            "lead_details": "Lead Details",
+            "status": "Status",
+            "value": "Value",
+            "temperature": "Temperature",
+            "ai_score": "AI Score",
+            "last_contact": "Last Contact",
+            "actions": "Actions"
+        },
+        "stages": {
+            "new": "New",
+            "contacted": "Contacted",
+            "qualified": "Qualified",
+            "proposal": "Proposal",
+            "negotiation": "Negotiation",
+            "won": "Won",
+            "lost": "Lost",
+            "in_negotiation": "In Negotiation"
+        },
+        "temperature": {
+            "hot": "Hot",
+            "warm": "Warm",
+            "cold": "Cold"
+        }
+    },
+    "chat": {
+        "title": "Live Chat",
+        "subtitle": "Real-time WhatsApp communication.",
+        "search_placeholder": "Search conversations...",
+        "type_message": "Type a message...",
+        "send": "Send",
+        "attach": "Attach",
+        "no_chat_selected": "Select a chat to start messaging",
+        "online": "Online",
+        "typing": "typing...",
+        "suggested_contacts": "Suggested Contacts",
+        "contact_info": {
+            "title": "Contact Info",
+            "about": "About",
+            "stage": "Stage",
+            "temperature": "Temperature",
+            "ai_score": "AI Score",
+            "notes": "Notes",
+            "save_notes": "Save Notes"
+        }
+    },
+    "imports": {
+        "title": "Apify Imports",
+        "subtitle": "Manage and process scraped leads.",
+        "import_csv": "Import CSV",
+        "importing": "Importing",
+        "export_csv": "Export CSV",
+        "clean_invalid": "Clean Invalid",
+        "sync_apify": "Sync Apify",
+        "search_placeholder": "Search imports...",
+        "filter_all": "All Status",
+        "filter_sent": "Sent",
+        "filter_not_sent": "Not Sent",
+        "filter_error": "Error",
+        "table": {
+            "business": "Business",
+            "category": "Category",
+            "phone": "Phone",
+            "location": "Location",
+            "source": "Source",
+            "status": "Status"
+        }
+    },
+    "automation": {
+        "title": "Automation Flows",
+        "subtitle": "Manage n8n workflows and AI triggers.",
+        "new_workflow": "New Workflow",
+        "create_workflow": "Create Workflow",
+        "connect_n8n": "Connect n8n webhook or AI trigger",
+        "active": "Active",
+        "paused": "Paused",
+        "no_workflows": "No workflows active yet."
+    },
+    "team": {
+        "title": "Team Management",
+        "subtitle": "Manage user access and roles",
+        "total_users": "Total Users",
+        "table": {
+            "user": "User",
+            "role": "Role",
+            "status": "Status",
+            "joined": "Joined",
+            "actions": "Actions"
+        },
+        "roles": {
+            "admin": "Admin",
+            "user": "User"
+        },
+        "status": {
+            "active": "Active",
+            "pending": "Pending",
+            "blocked": "Blocked"
+        }
+    },
+    "qrcode": {
+        "title": "Connect WhatsApp",
+        "scan_instruction": "Open WhatsApp on your phone, go to Linked Devices and scan the code.",
+        "status": "Status",
+        "waiting": "WAITING FOR QR CODE...",
+        "connected_title": "Connected Successfully",
+        "connected_msg": "Your session is active and ready to use.",
+        "close": "Close Window",
+        "initializing": "Initializing Session...",
+        "please_wait": "Please wait a moment",
+        "disconnected_title": "Session Disconnected",
+        "disconnected_msg": "Start a new session to generate a QR code.",
+        "start_session": "Start New Session",
+        "reset_session": "Reset Session (Logout)"
+    },
+    "profile_dropdown": {
+        "view_profile": "View Profile",
+        "account_settings": "Account Settings",
+        "team_management": "Team Management",
+        "sign_out": "Sign Out"
+    }
+}

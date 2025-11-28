@@ -1,0 +1,189 @@
+{
+    "common": {
+        "save": "Salvar",
+        "cancel": "Cancelar",
+        "delete": "Excluir",
+        "edit": "Editar",
+        "search": "Buscar...",
+        "loading": "Carregando...",
+        "success": "Sucesso",
+        "error": "Erro",
+        "actions": "Ações",
+        "status": "Status",
+        "date": "Data",
+        "name": "Nome",
+        "email": "Email",
+        "phone": "Telefone",
+        "role": "Função",
+        "view_profile": "Ver Perfil",
+        "account_settings": "Configurações",
+        "sign_out": "Sair",
+        "team_management": "Gerenciar Equipe",
+        "filter": "Filtrar"
+    },
+    "sidebar": {
+        "dashboard": "Painel",
+        "leads": "Leads",
+        "chat": "Conversas",
+        "imports": "Importações",
+        "automation": "Automação",
+        "team": "Equipe",
+        "logout": "Sair",
+        "system_status": "Status do Sistema",
+        "waha_api": "API WAHA",
+        "n8n_workflow": "Fluxo n8n",
+        "password_label": "Senha",
+        "password_placeholder": "Digite sua senha",
+        "sign_in": "Entrar",
+        "loading": "Entrando...",
+        "or_continue_with": "Ou continue com",
+        "google_button": "Google",
+        "terms_prefix": "Ao entrar, você concorda com nossos",
+        "terms_link": "Termos de Serviço"
+    },
+    "pending": {
+        "title": "Acesso Pendente",
+        "message": "Sua conta está aguardando aprovação do administrador. Você será notificado assim que seu acesso for concedido.",
+        "sign_out_button": "Sair"
+    },
+    "dashboard": {
+        "title": "Painel de Controle",
+        "subtitle": "Visão geral do seu desempenho",
+        "total_leads": "Total de Leads",
+        "active_chats": "Conversas Ativas",
+        "conversion_rate": "Taxa de Conversão",
+        "revenue": "Receita",
+        "pipeline_value": "Valor do Pipeline",
+        "closed_revenue": "Receita Fechada",
+        "recent_activity": "Atividade Recente",
+        "view_all": "Ver Tudo",
+        "no_activity": "Nenhuma atividade recente"
+    },
+    "leads": {
+        "title": "Gerenciamento de Leads",
+        "subtitle": "Acompanhe e gerencie seus clientes potenciais",
+        "total_leads": "Total de Leads",
+        "all_leads": "Todos os Leads",
+        "add_lead": "Adicionar Lead",
+        "search_placeholder": "Buscar leads...",
+        "table": {
+            "lead_details": "Detalhes do Lead",
+            "status": "Status",
+            "value": "Valor",
+            "temperature": "Temperatura",
+            "ai_score": "Pontuação IA",
+            "last_contact": "Último Contato",
+            "actions": "Ações"
+        },
+        "stages": {
+            "new": "Novo",
+            "contacted": "Contatado",
+            "qualified": "Qualificado",
+            "proposal": "Proposta",
+            "negotiation": "Negociação",
+            "won": "Ganho",
+            "lost": "Perdido",
+            "in_negotiation": "Em Negociação"
+        },
+        "temperature": {
+            "hot": "Quente",
+            "warm": "Morno",
+            "cold": "Frio"
+        }
+    },
+    "chat": {
+        "title": "Chat ao Vivo",
+        "subtitle": "Comunicação WhatsApp em tempo real.",
+        "search_placeholder": "Buscar conversas...",
+        "type_message": "Digite uma mensagem...",
+        "send": "Enviar",
+        "attach": "Anexar",
+        "no_chat_selected": "Selecione uma conversa para começar",
+        "online": "Online",
+        "typing": "digitando...",
+        "suggested_contacts": "Contatos Sugeridos",
+        "contact_info": {
+            "title": "Informações do Contato",
+            "about": "Sobre",
+            "stage": "Estágio",
+            "temperature": "Temperatura",
+            "ai_score": "Pontuação IA",
+            "notes": "Notas",
+            "save_notes": "Salvar Notas"
+        }
+    },
+    "imports": {
+        "title": "Importações Apify",
+        "subtitle": "Gerencie e processe leads extraídos.",
+        "import_csv": "Importar CSV",
+        "importing": "Importando",
+        "export_csv": "Exportar CSV",
+        "clean_invalid": "Limpar Inválidos",
+        "sync_apify": "Sincronizar Apify",
+        "search_placeholder": "Buscar importações...",
+        "filter_all": "Todos Status",
+        "filter_sent": "Enviado",
+        "filter_not_sent": "Não Enviado",
+        "filter_error": "Erro",
+        "table": {
+            "business": "Empresa",
+            "category": "Categoria",
+            "phone": "Telefone",
+            "location": "Localização",
+            "source": "Origem",
+            "status": "Status"
+        }
+    },
+    "automation": {
+        "title": "Fluxos de Automação",
+        "subtitle": "Gerencie fluxos n8n e gatilhos de IA.",
+        "new_workflow": "Novo Fluxo",
+        "create_workflow": "Criar Fluxo",
+        "connect_n8n": "Conectar webhook n8n ou gatilho IA",
+        "active": "Ativo",
+        "paused": "Pausado",
+        "no_workflows": "Nenhum fluxo ativo ainda."
+    },
+    "team": {
+        "title": "Gerenciamento de Equipe",
+        "subtitle": "Gerencie acesso e funções de usuários",
+        "total_users": "Total de Usuários",
+        "table": {
+            "user": "Usuário",
+            "role": "Função",
+            "status": "Status",
+            "joined": "Entrou em",
+            "actions": "Ações"
+        },
+        "roles": {
+            "admin": "Admin",
+            "user": "Usuário"
+        },
+        "status": {
+            "active": "Ativo",
+            "pending": "Pendente",
+            "blocked": "Bloqueado"
+        }
+    },
+    "qrcode": {
+        "title": "Conectar WhatsApp",
+        "scan_instruction": "Abra o WhatsApp no seu celular, vá em Aparelhos Conectados e escaneie o código.",
+        "status": "Status",
+        "waiting": "AGUARDANDO QR CODE...",
+        "connected_title": "Conectado com Sucesso",
+        "connected_msg": "Sua sessão está ativa e pronta para uso.",
+        "close": "Fechar Janela",
+        "initializing": "Iniciando Sessão...",
+        "please_wait": "Por favor aguarde um momento",
+        "disconnected_title": "Sessão Desconectada",
+        "disconnected_msg": "Inicie uma nova sessão para gerar um código QR.",
+        "start_session": "Iniciar Nova Sessão",
+        "reset_session": "Resetar Sessão (Sair)"
+    },
+    "profile_dropdown": {
+        "view_profile": "Ver Perfil",
+        "account_settings": "Configurações",
+        "team_management": "Gerenciar Equipe",
+        "sign_out": "Sair"
+    }
+}

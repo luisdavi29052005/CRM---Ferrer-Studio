@@ -1,0 +1,425 @@
+import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Download, FileDown, RefreshCw, Upload, CheckCircle, Clock, AlertCircle, MessageSquare, Search, Filter, Trash2 } from 'lucide-react';
+import Papa from 'papaparse';
+import { supabase } from '../supabaseClient';
+import { Lead } from '../types';
+
+export type ApifyLead = {
+  id: number;
+  title: string;
+  phone: string | null;
+  category: string | null;
+  url: string | null;
+  city: string | null;
+  state: string | null;
+  source: string;
+  status: 'sent' | 'not sent' | 'error';
+  created_at: string;
+};
+
+type Props = {
+  items: ApifyLead[];
+  onImport?: () => void | Promise<void>;
+  onOpenChat?: (lead: Lead) => void;
+};
+
+export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
+  const { t } = useTranslation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'not sent' | 'error'>('all');
+
+  const filteredItems = items.filter(item => {
+    const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedItems(new Set(filteredItems.map(item => item.id)));
+    } else {
+      setSelectedItems(new Set());
+    }
+  };
+
+  const handleSelectItem = (id: number) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedItems(newSelected);
+  };
+
+  const handleContact = (item: ApifyLead) => {
+    if (onOpenChat) {
+      // Convert ApifyLead to Lead structure for chat
+      const lead: Lead = {
+        id: item.id.toString(),
+        chat_id: item.phone || '', // Assuming phone is the chat ID
+        name: item.title,
+        business: item.title,
+        phone: item.phone || '',
+        city: item.city || '',
+        stage: 'New',
+        temperature: 'Cold',
+        score: 0,
+        budget: 0,
+        notes: `Imported from Apify. Category: ${item.category || 'N/A'}`,
+        source: 'apify',
+        last_interaction: 'Never'
+      };
+      onOpenChat(lead);
+    }
+  };
+
+  const handleExportCSV = () => {
+    const csvRows = [];
+    const headers = ['title', 'street', 'city', 'state', 'country', 'url', 'category', 'phone'];
+    csvRows.push(headers.join(','));
+
+    filteredItems.forEach((item) => {
+      const row = [
+        item.title,
+        '', // street
+        item.city || '',
+        item.state || '',
+        '', // country
+        item.url || '',
+        item.category || '',
+        item.phone || '',
+      ];
+
+      // Escape values and wrap in quotes if they contain commas
+      const escapedRow = row.map(value => {
+        const stringValue = String(value);
+        if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+          return `"${stringValue.replace(/"/g, '""')}"`;
+        }
+        return stringValue;
+      });
+      csvRows.push(escapedRow.join(','));
+    });
+
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    if (link.download !== undefined) {
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'apify_export.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    setImportProgress(0);
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      worker: true, // Offload to worker to prevent freezing
+      complete: async (results) => {
+        const rows = results.data as any[];
+
+        // Map and validate
+        const allLeads = rows.map((row: any) => {
+          const lead: any = {};
+          // Flexible header matching
+          const keys = Object.keys(row);
+
+          const findKey = (search: string[]) => keys.find(k => search.includes(k.toLowerCase().trim()));
+
+          lead.title = row[findKey(['title', 'name', 'business', 'company']) || ''] || row.title || 'Unknown';
+          lead.phone = row[findKey(['phone', 'phonenumber', 'mobile', 'cell']) || ''] || row.phone;
+          lead.category = row[findKey(['category', 'categoryname', 'industry', 'type']) || ''] || row.category;
+          lead.url = row[findKey(['url', 'website', 'link']) || ''] || row.url;
+          lead.city = row[findKey(['city', 'location']) || ''] || row.city;
+          lead.state = row[findKey(['state', 'province']) || ''] || row.state;
+          lead.country = row[findKey(['country', 'countrycode']) || ''] || row.country;
+          lead.street = row[findKey(['street', 'address']) || ''] || row.street;
+
+          lead.source = 'csv_import';
+          lead.status = 'not sent';
+          return lead;
+        });
+
+        // Filter valid leads
+        const leadsToInsert = allLeads.filter(lead => lead.phone && lead.phone.toString().trim().length > 0);
+        const skippedCount = allLeads.length - leadsToInsert.length;
+
+        if (leadsToInsert.length === 0) {
+          alert(`No valid leads found. (${skippedCount} skipped due to missing phone)`);
+          setImporting(false);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+          return;
+        }
+
+        // Chunked Insertion
+        const CHUNK_SIZE = 50;
+        let insertedCount = 0;
+        let errorCount = 0;
+
+        for (let i = 0; i < leadsToInsert.length; i += CHUNK_SIZE) {
+          const chunk = leadsToInsert.slice(i, i + CHUNK_SIZE);
+          const { error } = await supabase.from('apify').insert(chunk);
+
+          if (error) {
+            console.error('Error importing chunk:', error);
+            errorCount += chunk.length;
+          } else {
+            insertedCount += chunk.length;
+          }
+
+          // Update progress
+          setImportProgress(Math.round(((i + chunk.length) / leadsToInsert.length) * 100));
+        }
+
+        alert(`Import finished!\nSuccess: ${insertedCount}\nErrors: ${errorCount}\nSkipped: ${skippedCount}`);
+
+        if (insertedCount > 0 && onImport) onImport();
+
+        setImporting(false);
+        setImportProgress(0);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      },
+      error: (error) => {
+        console.error('CSV Parse Error:', error);
+        alert(t('imports.error_parsing_csv'));
+        setImporting(false);
+      }
+    });
+  };
+
+  const handleCleanInvalid = async () => {
+    if (!confirm(t('imports.confirm_delete_invalid'))) return;
+
+    try {
+      // Delete where phone is null
+      const { error: errorNull } = await supabase
+        .from('apify')
+        .delete()
+        .is('phone', null);
+
+      // Delete where phone is empty string (if any)
+      const { error: errorEmpty } = await supabase
+        .from('apify')
+        .delete()
+        .eq('phone', '');
+
+      if (errorNull || errorEmpty) {
+        console.error('Error cleaning invalid leads:', errorNull || errorEmpty);
+        alert(t('imports.error_cleaning_leads'));
+      } else {
+        alert(t('imports.invalid_leads_cleaned_success'));
+        if (onImport) onImport();
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert(t('imports.an_error_occurred'));
+    }
+  };
+
+  return (
+    <div className="p-8 h-full flex flex-col overflow-hidden">
+      {/* Minimalist Header */}
+      <div className="flex items-end justify-between mb-8 pb-6 border-b border-white/5">
+        <div>
+          <h2 className="text-3xl font-bold text-zinc-100 tracking-tight">{t('imports.title')}</h2>
+          <p className="text-zinc-500 text-sm mt-2 font-medium">{t('imports.subtitle')}</p>
+        </div>
+
+        <div className="flex items-center gap-4">
+          {/* Minimalist Search */}
+          <div className="relative group">
+            <Search className="absolute left-0 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-zinc-300 transition-colors" size={16} />
+            <input
+              type="text"
+              placeholder={t('imports.search_placeholder')}
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="bg-transparent border-b border-zinc-800 text-zinc-200 pl-6 pr-4 py-2 focus:outline-none focus:border-bronze-500 transition-colors text-sm w-64 placeholder:text-zinc-600"
+            />
+          </div>
+
+          <div className="h-6 w-px bg-white/10 mx-2"></div>
+
+          {/* Status Filter */}
+          <div className="relative">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+              className="appearance-none bg-transparent hover:bg-white/5 text-zinc-400 hover:text-zinc-200 pl-8 pr-4 py-1.5 rounded-lg border border-transparent hover:border-white/5 transition-all text-xs font-medium uppercase tracking-wider cursor-pointer focus:outline-none focus:ring-0"
+            >
+              <option value="all" className="bg-zinc-900 text-zinc-400">{t('imports.filter_all')}</option>
+              <option value="sent" className="bg-zinc-900 text-zinc-400">{t('imports.filter_sent')}</option>
+              <option value="not sent" className="bg-zinc-900 text-zinc-400">{t('imports.filter_not_sent')}</option>
+              <option value="error" className="bg-zinc-900 text-zinc-400">{t('imports.filter_error')}</option>
+            </select>
+            <Filter size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-2 hover:bg-white/5 text-zinc-400 hover:text-zinc-200 rounded-lg border border-transparent hover:border-white/5 transition-all"
+              title={t('imports.import_csv')}
+            >
+              <Upload size={16} />
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".csv"
+              className="hidden"
+            />
+
+            <button
+              onClick={handleExportCSV}
+              className="p-2 hover:bg-white/5 text-zinc-400 hover:text-zinc-200 rounded-lg border border-transparent hover:border-white/5 transition-all"
+              title={t('imports.export_csv')}
+            >
+              <FileDown size={16} />
+            </button>
+
+            <button
+              onClick={handleCleanInvalid}
+              className="p-2 hover:bg-red-500/10 text-zinc-400 hover:text-red-400 rounded-lg border border-transparent hover:border-red-500/20 transition-all"
+              title={t('imports.clean_invalid')}
+            >
+              <Trash2 size={16} />
+            </button>
+
+            <button
+              onClick={() => onImport && onImport()}
+              className="ml-2 px-4 py-2 bg-zinc-100 hover:bg-white text-black rounded-lg transition-all transform hover:scale-105 text-xs font-bold uppercase tracking-wide shadow-[0_0_15px_rgba(255,255,255,0.1)] flex items-center gap-2"
+            >
+              <RefreshCw size={14} />
+              <span>{t('imports.sync_apify')}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Table Container - No Box, Just Content */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex items-center justify-between mb-4 px-2">
+          <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">{t('imports.all_imports_count', { count: filteredItems.length })}</span>
+        </div>
+
+        <div className="overflow-auto custom-scrollbar flex-1 -mx-4 px-4">
+          <table className="w-full text-left border-collapse">
+            <thead className="sticky top-0 z-10 bg-black/80 backdrop-blur-sm">
+              <tr>
+                <th className="py-3 px-4 border-b border-white/5 w-10">
+                  <div className="flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={filteredItems.length > 0 && selectedItems.size === filteredItems.length}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-zinc-100 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                    />
+                  </div>
+                </th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('imports.table.business')}</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('imports.table.phone')}</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('imports.table.category')}</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('imports.table.location')}</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('imports.table.status')}</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 text-right">{t('common.actions')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {filteredItems.length > 0 ? (
+                filteredItems.map((item) => (
+                  <tr key={item.id} className="group hover:bg-white/[0.02] transition-colors">
+                    <td className="py-4 px-4">
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.has(item.id)}
+                          onChange={() => handleSelectItem(item.id)}
+                          className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-zinc-100 focus:ring-0 focus:ring-offset-0 cursor-pointer opacity-50 group-hover:opacity-100 transition-opacity"
+                        />
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-xs font-bold text-zinc-500 border border-white/5 group-hover:border-bronze-500/30 group-hover:text-bronze-500 transition-colors">
+                          {item.title.charAt(0)}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-zinc-200 text-sm group-hover:text-white transition-colors">{item.title}</span>
+                          {item.url && (
+                            <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-xs text-zinc-500 hover:text-zinc-300 truncate max-w-[200px]">
+                              {item.url.replace(/^https?:\/\//, '')}
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className="text-zinc-300 text-sm font-medium font-mono">{item.phone || '-'}</span>
+                    </td>
+                    <td className="py-4 px-4">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide border uppercase bg-zinc-800 text-zinc-400 border-zinc-700">
+                        {item.category || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="py-4 px-4 text-sm text-zinc-500">
+                      {item.city ? `${item.city}${item.state ? `, ${item.state}` : ''}` : '-'}
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${item.status === 'sent'
+                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                        : item.status === 'error'
+                          ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                          : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'
+                        }`}>
+                        {item.status === 'sent' && <CheckCircle size={10} />}
+                        {item.status === 'error' && <AlertCircle size={10} />}
+                        {item.status === 'not sent' && <Clock size={10} />}
+                        <span className="capitalize">{item.status}</span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      <button
+                        onClick={() => handleContact(item)}
+                        className="p-2 hover:bg-white/5 rounded-lg text-zinc-500 hover:text-bronze-400 transition-colors"
+                        title="Contact"
+                      >
+                        <MessageSquare size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-zinc-500 text-sm">
+                    No leads found matching your filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
