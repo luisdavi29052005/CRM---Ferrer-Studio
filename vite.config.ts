@@ -12,7 +12,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      'process.env.PAYPAL_ACCESS_TOKEN': JSON.stringify(env.PAYPAL_ACCESS_TOKEN),
+      'process.env.PAYPAL_ENVIRONMENT': JSON.stringify(env.PAYPAL_ENVIRONMENT)
     },
     resolve: {
       alias: {

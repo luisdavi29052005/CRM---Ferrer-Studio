@@ -38,6 +38,8 @@ export interface Lead {
   business: string;
   phone: string;
   city: string;
+  state?: string;
+  category?: string;
   stage: Stage;
   temperature: Temperature;
   score: number; // 0-100

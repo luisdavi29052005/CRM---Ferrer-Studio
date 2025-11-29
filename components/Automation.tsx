@@ -5,9 +5,10 @@ import { Play, Pause, Workflow, Plus, Calendar, Activity, MoreHorizontal, Trash2
 
 interface AutomationProps {
   flows: AutomationFlow[];
+  isAdmin: boolean;
 }
 
-export const Automation: React.FC<AutomationProps> = ({ flows }) => {
+export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin }) => {
   const { t } = useTranslation();
   return (
     <div className="p-8 h-full flex flex-col overflow-hidden">
@@ -17,10 +18,12 @@ export const Automation: React.FC<AutomationProps> = ({ flows }) => {
           <h2 className="text-3xl font-bold text-zinc-100 tracking-tight">{t('automation.title')}</h2>
           <p className="text-zinc-500 text-sm mt-2 font-medium">{t('automation.subtitle')}</p>
         </div>
-        <button className="group flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-white text-black rounded-lg text-sm font-medium transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]">
-          <Plus size={16} className="text-black/70 group-hover:text-black transition-colors" />
-          <span>{t('automation.new_workflow')}</span>
-        </button>
+        {isAdmin && (
+          <button className="group flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-white text-black rounded-lg text-sm font-medium transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]">
+            <Plus size={16} className="text-black/70 group-hover:text-black transition-colors" />
+            <span>{t('automation.new_workflow')}</span>
+          </button>
+        )}
       </div>
 
       {/* Content Area */}
@@ -28,17 +31,19 @@ export const Automation: React.FC<AutomationProps> = ({ flows }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
 
           {/* Create Workflow Card */}
-          <button className="group relative flex flex-col items-center justify-center p-6 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10 transition-all min-h-[180px] text-center gap-4 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/0 to-zinc-800/0 group-hover:from-zinc-800/10 group-hover:to-transparent transition-all duration-500" />
+          {isAdmin && (
+            <button className="group relative flex flex-col items-center justify-center p-6 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10 transition-all min-h-[180px] text-center gap-4 overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/0 to-zinc-800/0 group-hover:from-zinc-800/10 group-hover:to-transparent transition-all duration-500" />
 
-            <div className="w-12 h-12 rounded-full bg-zinc-900 border border-white/5 flex items-center justify-center group-hover:scale-110 group-hover:border-white/10 transition-all shadow-lg">
-              <Plus size={20} className="text-zinc-500 group-hover:text-zinc-200 transition-colors" />
-            </div>
-            <div className="relative z-10">
-              <h3 className="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors">{t('automation.create_workflow')}</h3>
-              <p className="text-xs text-zinc-600 mt-1 max-w-[140px] mx-auto group-hover:text-zinc-500 transition-colors">{t('automation.connect_n8n')}</p>
-            </div>
-          </button>
+              <div className="w-12 h-12 rounded-full bg-zinc-900 border border-white/5 flex items-center justify-center group-hover:scale-110 group-hover:border-white/10 transition-all shadow-lg">
+                <Plus size={20} className="text-zinc-500 group-hover:text-zinc-200 transition-colors" />
+              </div>
+              <div className="relative z-10">
+                <h3 className="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors">{t('automation.create_workflow')}</h3>
+                <p className="text-xs text-zinc-600 mt-1 max-w-[140px] mx-auto group-hover:text-zinc-500 transition-colors">{t('automation.connect_n8n')}</p>
+              </div>
+            </button>
+          )}
 
           {/* Workflow Cards */}
           {flows.map((flow) => (
@@ -77,14 +82,16 @@ export const Automation: React.FC<AutomationProps> = ({ flows }) => {
               </div>
 
               {/* Hover Actions */}
-              <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                <button className="p-1.5 rounded-md hover:bg-white/10 text-zinc-500 hover:text-zinc-200 transition-colors">
-                  <Edit2 size={12} />
-                </button>
-                <button className="p-1.5 rounded-md hover:bg-red-500/10 text-zinc-500 hover:text-red-400 transition-colors">
-                  <Trash2 size={12} />
-                </button>
-              </div>
+              {isAdmin && (
+                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                  <button className="p-1.5 rounded-md hover:bg-white/10 text-zinc-500 hover:text-zinc-200 transition-colors">
+                    <Edit2 size={12} />
+                  </button>
+                  <button className="p-1.5 rounded-md hover:bg-red-500/10 text-zinc-500 hover:text-red-400 transition-colors">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
 

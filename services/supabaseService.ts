@@ -26,6 +26,8 @@ export const fetchLeads = async (): Promise<Lead[]> => {
         business: lead.business || '',
         phone: lead.phone || '',
         city: lead.city || '',
+        state: lead.state || '',
+        category: lead.category || '',
         stage: (lead.stage as Stage) || 'New',
         temperature: (lead.temperature as Temperature) || 'Cold',
         score: lead.score || 0,

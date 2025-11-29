@@ -1,9 +1,11 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, FileDown, RefreshCw, Upload, CheckCircle, Clock, AlertCircle, MessageSquare, Search, Filter, Trash2 } from 'lucide-react';
+import { Download, FileDown, RefreshCw, Upload, CheckCircle, Clock, AlertCircle, MessageSquare, Search, Filter, Trash2, X, Calendar } from 'lucide-react';
 import Papa from 'papaparse';
 import { supabase } from '../supabaseClient';
 import { Lead } from '../types';
+import { motion, AnimatePresence } from 'framer-motion';
+import { HighlightText } from './HighlightText';
 
 export type ApifyLead = {
   id: number;
@@ -31,14 +33,42 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
   const [importProgress, setImportProgress] = useState(0);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'not sent' | 'error'>('all');
+
+  // Advanced Filters State
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    status: 'all' as 'all' | 'sent' | 'not sent' | 'error',
+    city: '',
+    state: '',
+    category: '',
+    dateStart: '',
+    dateEnd: ''
+  });
 
   const filteredItems = items.filter(item => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStatus = statusFilter === 'all' || item.status === statusFilter;
-    return matchesSearch && matchesStatus;
+
+    const matchesStatus = filters.status === 'all' || item.status === filters.status;
+    const matchesCity = !filters.city || (item.city && item.city.toLowerCase().includes(filters.city.toLowerCase()));
+    const matchesState = !filters.state || (item.state && item.state.toLowerCase().includes(filters.state.toLowerCase()));
+    const matchesCategory = !filters.category || (item.category && item.category.toLowerCase().includes(filters.category.toLowerCase()));
+
+    let matchesDate = true;
+    if (filters.dateStart) {
+      matchesDate = matchesDate && new Date(item.created_at) >= new Date(filters.dateStart);
+    }
+    if (filters.dateEnd) {
+      // Set end date to end of day
+      const endDate = new Date(filters.dateEnd);
+      endDate.setHours(23, 59, 59, 999);
+      matchesDate = matchesDate && new Date(item.created_at) <= endDate;
+    }
+
+    return matchesSearch && matchesStatus && matchesCity && matchesState && matchesCategory && matchesDate;
   });
+
+  const activeFiltersCount = Object.values(filters).filter(v => v !== 'all' && v !== '').length;
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -68,6 +98,8 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
         business: item.title,
         phone: item.phone || '',
         city: item.city || '',
+        state: item.state || '',
+        category: item.category || '',
         stage: 'New',
         temperature: 'Cold',
         score: 0,
@@ -235,7 +267,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
   };
 
   return (
-    <div className="p-8 h-full flex flex-col overflow-hidden">
+    <div className="p-8 h-full flex flex-col overflow-hidden relative">
       {/* Minimalist Header */}
       <div className="flex items-end justify-between mb-8 pb-6 border-b border-white/5">
         <div>
@@ -258,19 +290,130 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
 
           <div className="h-6 w-px bg-white/10 mx-2"></div>
 
-          {/* Status Filter */}
+          {/* Filter Button */}
           <div className="relative">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="appearance-none bg-transparent hover:bg-white/5 text-zinc-400 hover:text-zinc-200 pl-8 pr-4 py-1.5 rounded-lg border border-transparent hover:border-white/5 transition-all text-xs font-medium uppercase tracking-wider cursor-pointer focus:outline-none focus:ring-0"
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`px-3 py-1.5 rounded-lg border transition-all flex items-center gap-2 text-xs font-medium uppercase tracking-wider ${showFilters || activeFiltersCount > 0
+                ? 'bg-white/10 text-zinc-100 border-white/10'
+                : 'hover:bg-white/5 text-zinc-400 hover:text-zinc-200 border-transparent hover:border-white/5'
+                }`}
             >
-              <option value="all" className="bg-zinc-900 text-zinc-400">{t('imports.filter_all')}</option>
-              <option value="sent" className="bg-zinc-900 text-zinc-400">{t('imports.filter_sent')}</option>
-              <option value="not sent" className="bg-zinc-900 text-zinc-400">{t('imports.filter_not_sent')}</option>
-              <option value="error" className="bg-zinc-900 text-zinc-400">{t('imports.filter_error')}</option>
-            </select>
-            <Filter size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+              <Filter size={14} />
+              {t('common.filter')}
+              {activeFiltersCount > 0 && (
+                <span className="ml-1 w-4 h-4 rounded-full bg-bronze-500 text-black text-[9px] flex items-center justify-center font-bold">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+
+            {/* Filter Panel */}
+            <AnimatePresence>
+              {showFilters && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowFilters(false)}></div>
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 top-full mt-2 w-80 bg-[#0B0B0B] border border-white/10 rounded-xl shadow-2xl shadow-black/50 backdrop-blur-xl z-50 p-5"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-sm font-bold text-zinc-200">Filters</h3>
+                      <button
+                        onClick={() => {
+                          setFilters({
+                            status: 'all',
+                            city: '',
+                            state: '',
+                            category: '',
+                            dateStart: '',
+                            dateEnd: ''
+                          });
+                        }}
+                        className="text-[10px] text-zinc-500 hover:text-zinc-300 uppercase tracking-wider font-medium"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* Status */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Status</label>
+                        <select
+                          value={filters.status}
+                          onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
+                          className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors"
+                        >
+                          <option value="all">All Statuses</option>
+                          <option value="sent">Sent</option>
+                          <option value="not sent">Not Sent</option>
+                          <option value="error">Error</option>
+                        </select>
+                      </div>
+
+                      {/* City & State */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">City</label>
+                          <input
+                            type="text"
+                            value={filters.city}
+                            onChange={(e) => setFilters({ ...filters, city: e.target.value })}
+                            placeholder="e.g. New York"
+                            className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">State</label>
+                          <input
+                            type="text"
+                            value={filters.state}
+                            onChange={(e) => setFilters({ ...filters, state: e.target.value })}
+                            placeholder="e.g. NY"
+                            className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Category */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Category</label>
+                        <input
+                          type="text"
+                          value={filters.category}
+                          onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+                          placeholder="e.g. Real Estate"
+                          className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
+                        />
+                      </div>
+
+                      {/* Date Range */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Date Added</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <input
+                            type="date"
+                            value={filters.dateStart}
+                            onChange={(e) => setFilters({ ...filters, dateStart: e.target.value })}
+                            className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors"
+                          />
+                          <input
+                            type="date"
+                            value={filters.dateEnd}
+                            onChange={(e) => setFilters({ ...filters, dateEnd: e.target.value })}
+                            className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Actions */}
@@ -365,7 +508,9 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                           {item.title.charAt(0)}
                         </div>
                         <div className="flex flex-col">
-                          <span className="font-semibold text-zinc-200 text-sm group-hover:text-white transition-colors">{item.title}</span>
+                          <span className="font-semibold text-zinc-200 text-sm group-hover:text-white transition-colors">
+                            <HighlightText text={item.title} highlight={searchTerm} />
+                          </span>
                           {item.url && (
                             <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-xs text-zinc-500 hover:text-zinc-300 truncate max-w-[200px]">
                               {item.url.replace(/^https?:\/\//, '')}
@@ -375,15 +520,22 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <span className="text-zinc-300 text-sm font-medium font-mono">{item.phone || '-'}</span>
+                      <span className="text-zinc-300 text-sm font-medium font-mono">
+                        <HighlightText text={item.phone || '-'} highlight={searchTerm} />
+                      </span>
                     </td>
                     <td className="py-4 px-4">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide border uppercase bg-zinc-800 text-zinc-400 border-zinc-700">
-                        {item.category || 'N/A'}
+                        <HighlightText text={item.category || 'N/A'} highlight={filters.category} />
                       </span>
                     </td>
                     <td className="py-4 px-4 text-sm text-zinc-500">
-                      {item.city ? `${item.city}${item.state ? `, ${item.state}` : ''}` : '-'}
+                      <div className="flex flex-col">
+                        <HighlightText text={item.city || ''} highlight={filters.city || searchTerm} />
+                        <span className="text-xs text-zinc-600">
+                          <HighlightText text={item.state || ''} highlight={filters.state} />
+                        </span>
+                      </div>
                     </td>
                     <td className="py-4 px-4">
                       <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${item.status === 'sent'

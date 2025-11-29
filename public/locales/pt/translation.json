@@ -57,7 +57,32 @@
         "closed_revenue": "Receita Fechada",
         "recent_activity": "Atividade Recente",
         "view_all": "Ver Tudo",
-        "no_activity": "Nenhuma atividade recente"
+        "no_activity": "Nenhuma atividade recente",
+        "lead_pipeline_revenue": "Receita do Pipeline de Leads (BRL)",
+        "international_sales": "Vendas Internacionais (PayPal)",
+        "gross_revenue": "Receita Bruta",
+        "paypal_fees": "Taxas PayPal",
+        "net_revenue": "Receita Líquida",
+        "sales_count": "Contagem de Vendas",
+        "earnings_trend": "Tendência de Ganhos",
+        "revenue_trend": "Tendência de Receita",
+        "recent_transactions": "Transações Recentes",
+        "date_ranges": {
+            "30d": "30 Dias",
+            "90d": "3 Meses",
+            "ytd": "Ano Atual",
+            "1y": "1 Ano"
+        },
+        "transactions_table": {
+            "date": "Data",
+            "customer": "Cliente",
+            "gross": "Bruto",
+            "fee": "Taxa",
+            "net": "Líquido",
+            "status": "Status",
+            "no_transactions": "Nenhuma transação encontrada neste período.",
+            "no_international_transactions": "Nenhuma transação internacional encontrada."
+        }
     },
     "leads": {
         "title": "Gerenciamento de Leads",

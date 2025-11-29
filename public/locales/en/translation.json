@@ -71,7 +71,32 @@
         "closed_revenue": "Closed Revenue",
         "recent_activity": "Recent Activity",
         "view_all": "View All",
-        "no_activity": "No recent activity"
+        "no_activity": "No recent activity",
+        "lead_pipeline_revenue": "Lead Pipeline Revenue (BRL)",
+        "international_sales": "International Sales (PayPal)",
+        "gross_revenue": "Gross Revenue",
+        "paypal_fees": "PayPal Fees",
+        "net_revenue": "Net Revenue",
+        "sales_count": "Sales Count",
+        "earnings_trend": "Earnings Trend",
+        "revenue_trend": "Revenue Trend",
+        "recent_transactions": "Recent Transactions",
+        "date_ranges": {
+            "30d": "30 Days",
+            "90d": "3 Months",
+            "ytd": "YTD",
+            "1y": "1 Year"
+        },
+        "transactions_table": {
+            "date": "Date",
+            "customer": "Customer",
+            "gross": "Gross",
+            "fee": "Fee",
+            "net": "Net",
+            "status": "Status",
+            "no_transactions": "No transactions found in this period.",
+            "no_international_transactions": "No international transactions found."
+        }
     },
     "leads": {
         "title": "Leads Management",

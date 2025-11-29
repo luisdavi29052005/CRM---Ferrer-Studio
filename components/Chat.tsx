@@ -15,9 +15,10 @@ interface ChatProps {
   initialChatId?: string;
   initialLead?: Lead;
   onConnectClick?: () => void;
+  isAdmin: boolean;
 }
 
-export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initialChatId, initialLead, onConnectClick }) => {
+export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initialChatId, initialLead, onConnectClick, isAdmin }) => {
   const { t } = useTranslation();
   const [selectedChatId, setSelectedChatId] = useState<string | null>(initialChatId || (chats[0]?.chatID ?? null));
   const [messages, setMessages] = useState<Message[]>([]);
@@ -131,11 +132,15 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
             name: apifyLead.title || apifyLead.name || 'Unknown',
             phone: apifyLead.phone,
             business: apifyLead.category,
-            status: 'New',
+            city: apifyLead.city || '',
+            stage: 'New',
             temperature: 'Cold',
-            source: 'Apify',
+            score: 0,
+            budget: 0,
+            notes: '',
+            last_interaction: new Date().toISOString(),
+            source: 'apify',
             chat_id: apifyLead.chat_id || apifyLead.phone,
-            avatar_url: apifyLead.avatar_url
           } as Lead
         };
       }
@@ -286,13 +291,15 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
                   Open WhatsApp on your phone and scan the code to connect.
                 </p>
 
-                <button
-                  onClick={fetchQRCode}
-                  className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-2 uppercase tracking-wider font-medium group"
-                >
-                  <RefreshCw size={12} className="group-hover:rotate-180 transition-transform duration-500" />
-                  Refresh Code
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={fetchQRCode}
+                    className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors flex items-center gap-2 uppercase tracking-wider font-medium group"
+                  >
+                    <RefreshCw size={12} className="group-hover:rotate-180 transition-transform duration-500" />
+                    Refresh Code
+                  </button>
+                )}
               </div>
             ) : (
               <>
@@ -307,18 +314,20 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
                   Start a new session to generate a QR code.
                 </p>
 
-                <button
-                  onClick={handleStartSession}
-                  disabled={isLoading}
-                  className="group px-6 py-2.5 bg-white text-black rounded-md hover:bg-zinc-200 transition-colors font-semibold text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isLoading ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <RefreshCw size={16} className={`transition-transform duration-500 group-hover:rotate-180`} />
-                  )}
-                  <span>{isLoading ? 'Starting...' : 'Start New Session'}</span>
-                </button>
+                {isAdmin && (
+                  <button
+                    onClick={handleStartSession}
+                    disabled={isLoading}
+                    className="group px-6 py-2.5 bg-white text-black rounded-md hover:bg-zinc-200 transition-colors font-semibold text-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={16} className={`transition-transform duration-500 group-hover:rotate-180`} />
+                    )}
+                    <span>{isLoading ? 'Starting...' : 'Start New Session'}</span>
+                  </button>
+                )}
               </>
             )}
           </div>

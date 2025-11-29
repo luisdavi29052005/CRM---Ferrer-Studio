@@ -1,0 +1,310 @@
+import { PayPalAgentToolkit } from '@paypal/agent-toolkit/ai-sdk';
+
+// Initialize the PayPal Agent Toolkit
+// We use the access token provided in the environment variables
+// Note: In a production environment, this should be run on the server side to keep credentials secure.
+
+const paypalToolkit = new PayPalAgentToolkit({
+    // If using Access Token, Client ID/Secret might be optional or ignored if the token is set in env
+    // However, the type definition usually requires them. 
+    // We'll pass process.env values if available, or placeholders if relying on the Access Token env var.
+    clientId: process.env.PAYPAL_CLIENT_ID || 'placeholder_client_id',
+    clientSecret: process.env.PAYPAL_CLIENT_SECRET || 'placeholder_client_secret',
+    configuration: {
+        actions: {
+            invoices: {
+                create: true,
+                list: true,
+                send: true,
+                sendReminder: true,
+                cancel: true,
+                generateQRC: true,
+            },
+            products: {
+                create: true,
+                list: true,
+                update: true
+            },
+            subscriptionPlans: {
+                create: true,
+                list: true,
+                show: true
+            },
+            shipment: {
+                create: true,
+                show: true,
+                cancel: true
+            },
+            orders: {
+                create: true,
+                get: true
+            },
+            disputes: {
+                list: true,
+                get: true
+            },
+        },
+        // Set environment based on env var
+        context: {
+            sandbox: process.env.PAYPAL_ENVIRONMENT === 'SANDBOX',
+        }
+    },
+});
+
+export const getPayPalTools = () => {
+    return paypalToolkit.getTools();
+};
+
+export interface PayPalTransaction {
+    id: string;
+    date: string;
+    status: string;
+    gross: number;
+    fee: number;
+    net: number;
+    currency: string;
+    customerName: string;
+    customerEmail: string;
+    invoiceId?: string;
+}
+
+export interface PayPalDashboardData {
+    summary: {
+        grossTotal: number;
+        feeTotal: number;
+        netTotal: number;
+        transactionCount: number;
+        avgTicket: number;
+        currency: string;
+    };
+    chartData: { date: string; amount: number }[];
+    transactions: PayPalTransaction[];
+}
+
+export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1y' = '30d'): Promise<PayPalDashboardData> => {
+    try {
+        const token = process.env.PAYPAL_ACCESS_TOKEN;
+        const environment = process.env.PAYPAL_ENVIRONMENT || 'SANDBOX';
+        const baseUrl = environment === 'PRODUCTION'
+            ? 'https://api-m.paypal.com'
+            : 'https://api-m.sandbox.paypal.com';
+
+        // Calculate date range
+        let endDate = new Date();
+        const startDate = new Date();
+
+        switch (range) {
+            case '30d':
+                startDate.setDate(startDate.getDate() - 30);
+                break;
+            case '90d':
+                startDate.setDate(startDate.getDate() - 90);
+                break;
+            case 'ytd':
+                startDate.setMonth(0, 1); // Jan 1st of current year
+                break;
+            case '1y':
+                startDate.setMonth(0, 1); // Jan 1st of current year
+                endDate = new Date(startDate.getFullYear(), 11, 31); // Dec 31st of current year
+                break;
+        }
+
+        // Helper to fetch a single chunk
+        const fetchChunk = async (start: Date, end: Date) => {
+            const startStr = start.toISOString();
+            const endStr = end.toISOString();
+            const response = await fetch(`${baseUrl}/v1/reporting/transactions?start_date=${startStr}&end_date=${endStr}&fields=transaction_info,payer_info,cart_info`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
+            if (!response.ok) throw new Error(`PayPal API Error: ${response.status}`);
+            return response.json();
+        };
+
+        // Split into 31-day chunks (PayPal limit)
+        const chunks: Promise<any>[] = [];
+        let currentStart = new Date(startDate);
+
+        while (currentStart < endDate) {
+            const currentEnd = new Date(currentStart);
+            currentEnd.setDate(currentEnd.getDate() + 31);
+
+            // Don't go past the actual end date
+            const chunkEnd = currentEnd > endDate ? endDate : currentEnd;
+
+            chunks.push(fetchChunk(currentStart, chunkEnd));
+
+            // Move to next chunk
+            currentStart = new Date(currentEnd);
+        }
+
+        // Fetch all chunks in parallel
+        const responses = await Promise.all(chunks);
+
+        // Merge data
+        let allTransactions: any[] = [];
+        responses.forEach(data => {
+            if (data.transaction_details) {
+                allTransactions = [...allTransactions, ...data.transaction_details];
+            }
+        });
+
+        // Initialize summary
+        let grossTotal = 0;
+        let feeTotal = 0;
+        let netTotal = 0;
+        let transactionCount = 0;
+        const currency = 'USD';
+        const dailyEarnings: { [key: string]: number } = {};
+        const transactions: PayPalTransaction[] = [];
+
+        allTransactions.forEach((tx: any) => {
+            const info = tx.transaction_info;
+            const payer = tx.payer_info || {};
+
+            const amount = parseFloat(info.transaction_amount?.value || '0');
+            const txCurrency = info.transaction_amount?.currency_code;
+            const fee = parseFloat(info.fee_amount?.value || '0');
+
+            if (txCurrency === 'USD') {
+                const date = info.transaction_initiation_date.split('T')[0];
+
+                transactions.push({
+                    id: info.transaction_id,
+                    date: info.transaction_initiation_date,
+                    status: info.transaction_status,
+                    gross: amount,
+                    fee: fee,
+                    net: amount + fee,
+                    currency: txCurrency,
+                    customerName: payer.payer_name?.alternate_full_name || 'N/A',
+                    customerEmail: payer.email_address || 'N/A',
+                    invoiceId: info.invoice_id
+                });
+
+                if (amount > 0) {
+                    grossTotal += amount;
+                    feeTotal += Math.abs(fee);
+                    netTotal += (amount + fee);
+                    transactionCount++;
+
+                    if (dailyEarnings[date]) {
+                        dailyEarnings[date] += amount;
+                    } else {
+                        dailyEarnings[date] = amount;
+                    }
+                }
+            }
+        });
+
+        // Generate complete date range for chart
+        const chartData: { date: string; amount: number }[] = [];
+        const currentDate = new Date(startDate);
+
+        // Normalize dates to midnight for comparison
+        const endDateTime = new Date(endDate);
+        endDateTime.setHours(0, 0, 0, 0);
+
+        while (currentDate <= endDateTime) {
+            const dateStr = currentDate.toISOString().split('T')[0];
+            chartData.push({
+                date: dateStr,
+                amount: dailyEarnings[dateStr] || 0
+            });
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        const avgTicket = transactionCount > 0 ? grossTotal / transactionCount : 0;
+
+        return {
+            summary: {
+                grossTotal,
+                feeTotal,
+                netTotal,
+                transactionCount,
+                avgTicket,
+                currency
+            },
+            chartData,
+            transactions: transactions
+                .filter(t => t.customerName !== 'N/A')
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        };
+
+    } catch (error) {
+        console.error("Error fetching PayPal data:", error);
+        throw error;
+    }
+};
+
+/**
+ * Fetches detailed order information from PayPal API
+ * @param orderId The PayPal Order ID (or Transaction ID in some contexts)
+ * @returns The full order details JSON
+ */
+export const getPayPalOrderDetails = async (orderId: string): Promise<any> => {
+    try {
+        const token = process.env.PAYPAL_ACCESS_TOKEN;
+        const environment = process.env.PAYPAL_ENVIRONMENT || 'SANDBOX';
+        const baseUrl = environment === 'PRODUCTION'
+            ? 'https://api-m.paypal.com'
+            : 'https://api-m.sandbox.paypal.com';
+
+        if (!token) {
+            throw new Error('PayPal Access Token not found in environment variables');
+        }
+
+        const response = await fetch(`${baseUrl}/v2/checkout/orders/${orderId}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            // Try v1 payments API (Captures) as fallback
+            console.warn(`v2/checkout/orders failed for ID ${orderId}, trying v1/payments/captures...`);
+            const captureResponse = await fetch(`${baseUrl}/v1/payments/captures/${orderId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (captureResponse.ok) {
+                return await captureResponse.json();
+            }
+
+            // Try v1 payments API (Sale) as second fallback
+            console.warn(`v1/payments/captures failed for ID ${orderId}, trying v1/payments/sale...`);
+            const saleResponse = await fetch(`${baseUrl}/v1/payments/sale/${orderId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (saleResponse.ok) {
+                return await saleResponse.json();
+            }
+
+            // If all fail, throw detailed error
+            const errorBody = await response.text();
+            throw new Error(`Failed to fetch details. Orders: ${response.status}, Captures: ${captureResponse.status}, Sale: ${saleResponse.status}. Msg: ${errorBody.substring(0, 100)}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching PayPal order details:', error);
+        throw error;
+    }
+};
+
+export { paypalToolkit };

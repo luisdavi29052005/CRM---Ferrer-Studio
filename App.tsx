@@ -661,7 +661,7 @@ const App = () => {
                       className="h-full"
                     >
                       {activeView === 'dashboard' && <Dashboard leads={leads} chartData={chartData} activity={activity} />}
-                      {activeView === 'leads' && <Leads leads={leads} onOpenChat={handleOpenChat} />}
+                      {activeView === 'leads' && <Leads leads={leads} onOpenChat={handleOpenChat} isAdmin={isAdmin} />}
                       {activeView === 'chat' && (
                         <Chat
                           chats={wahaChats}
@@ -671,6 +671,7 @@ const App = () => {
                           initialLead={selectedLead}
                           key={selectedLeadForChat}
                           onConnectClick={() => setIsQRModalOpen(true)}
+                          isAdmin={isAdmin}
                         />
                       )}
                       {activeView === 'apify' && <ApifyImports
@@ -681,7 +682,7 @@ const App = () => {
                           setApifyLeads(refreshedData);
                         }}
                       />}
-                      {activeView === 'automation' && <Automation flows={automations} />}
+                      {activeView === 'automation' && <Automation flows={automations} isAdmin={isAdmin} />}
                       {activeView === 'users' && isAdmin && <UserManagement />}
                     </motion.div>
                   </AnimatePresence>

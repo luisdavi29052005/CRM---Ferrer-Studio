@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@paypal/agent-toolkit": "^1.8.0",
     "@supabase/supabase-js": "^2.86.0",
     "@types/papaparse": "^5.5.0",
     "framer-motion": "11.0.3",

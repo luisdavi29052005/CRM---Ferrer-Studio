@@ -85,6 +85,7 @@ export type Database = {
                 Row: {
                     budget: string | null
                     business: string | null
+                    category: string | null
                     chat_id: string | null
                     city: string | null
                     created_at: string | null
@@ -96,12 +97,14 @@ export type Database = {
                     service: string | null
                     source: string | null
                     stage: string | null
+                    state: string | null
                     temperature: string | null
                     updated_at: string | null
                 }
                 Insert: {
                     budget?: string | null
                     business?: string | null
+                    category?: string | null
                     chat_id?: string | null
                     city?: string | null
                     created_at?: string | null
@@ -113,12 +116,14 @@ export type Database = {
                     service?: string | null
                     source?: string | null
                     stage?: string | null
+                    state?: string | null
                     temperature?: string | null
                     updated_at?: string | null
                 }
                 Update: {
                     budget?: string | null
                     business?: string | null
+                    category?: string | null
                     chat_id?: string | null
                     city?: string | null
                     created_at?: string | null
@@ -130,6 +135,7 @@ export type Database = {
                     service?: string | null
                     source?: string | null
                     stage?: string | null
+                    state?: string | null
                     temperature?: string | null
                     updated_at?: string | null
                 }
