@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, Users, MessageSquare, Database, Zap, Bell, ChevronDown, Activity, ArrowRight, Lock, Mail, LogOut, Settings, User } from 'lucide-react';
@@ -209,12 +208,13 @@ const App = () => {
   const [automations, setAutomations] = useState<AutomationFlow[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
-  const [activity, setActivity] = useState<ActivityItem[]>([]); // New state
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
 
   const [wahaStatus, setWahaStatus] = useState<'WORKING' | 'FAILED' | 'STOPPED' | 'STARTING' | 'UNKNOWN'>('UNKNOWN');
 
   const [userAvatar, setUserAvatar] = useState<string>('https://ui-avatars.com/api/?name=User&background=random');
   const [userName, setUserName] = useState<string>('User');
+  const [userEmail, setUserEmail] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('User');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
@@ -249,12 +249,15 @@ const App = () => {
           // Set User Avatar & Name
           const avatarUrl = session.user.user_metadata.avatar_url || session.user.user_metadata.picture;
           const name = session.user.user_metadata.full_name || session.user.user_metadata.name;
+          const email = session.user.email || '';
 
           if (avatarUrl) setUserAvatar(avatarUrl);
-          else if (session.user.email) setUserAvatar(`https://ui-avatars.com/api/?name=${session.user.email}&background=random&color=fff`);
+          else if (email) setUserAvatar(`https://ui-avatars.com/api/?name=${email}&background=random&color=fff`);
 
           if (name) setUserName(name);
-          else if (session.user.email) setUserName(session.user.email.split('@')[0]);
+          else if (email) setUserName(email.split('@')[0]);
+
+          setUserEmail(email);
 
           const profile = await authActions.getCurrentProfile(session.user.id);
 
@@ -270,13 +273,14 @@ const App = () => {
               await authActions.signOut();
               setIsAuthenticated(false);
               alert("Access Denied: Your account is blocked.");
-            } else if (profile.role === 'admin') {
-              setIsAuthenticated(true);
-              setIsAdmin(true);
-              setIsPending(false);
-            } else {
+            } else if (profile.status === 'pending') {
               setIsPending(true);
               setIsAuthenticated(false);
+            } else {
+              // Approved (or default active)
+              setIsAuthenticated(true);
+              setIsAdmin(profile.role === 'admin');
+              setIsPending(false);
             }
           } else {
             console.error("Profile not found.");
@@ -303,6 +307,7 @@ const App = () => {
         setAuthChecking(false);
         setUserAvatar('https://ui-avatars.com/api/?name=User&background=random');
         setUserName('User');
+        setUserEmail('');
         setUserRole('User');
         return;
       }
@@ -588,7 +593,8 @@ const App = () => {
                       </div>
                       <div className="flex flex-col items-start mr-2">
                         <span className="text-xs font-medium text-zinc-200 leading-none mb-0.5">{userName}</span>
-                        <span className="text-[10px] text-zinc-500 font-medium leading-none">{userRole}</span>
+                        <span className="text-[10px] text-zinc-500 font-medium leading-none">{userEmail}</span>
+                        <span className="text-[9px] text-zinc-600 font-medium leading-none mt-0.5 uppercase tracking-wider">{userRole}</span>
                       </div>
                       <ChevronDown size={12} className={`text-zinc-500 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
                     </button>

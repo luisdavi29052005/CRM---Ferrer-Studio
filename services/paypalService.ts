@@ -258,7 +258,8 @@ export const getPayPalOrderDetails = async (orderId: string): Promise<any> => {
             throw new Error('PayPal Access Token not found in environment variables');
         }
 
-        const response = await fetch(`${baseUrl}/v2/checkout/orders/${orderId}`, {
+        // 1. Try to fetch as a Capture first (to get detailed financials)
+        const captureResponse = await fetch(`${baseUrl}/v2/payments/captures/${orderId}`, {
             method: 'GET',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -266,41 +267,67 @@ export const getPayPalOrderDetails = async (orderId: string): Promise<any> => {
             },
         });
 
-        if (!response.ok) {
-            // Try v1 payments API (Captures) as fallback
-            console.warn(`v2/checkout/orders failed for ID ${orderId}, trying v1/payments/captures...`);
-            const captureResponse = await fetch(`${baseUrl}/v1/payments/captures/${orderId}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
+        if (captureResponse.ok) {
+            const captureData = await captureResponse.json();
 
-            if (captureResponse.ok) {
-                return await captureResponse.json();
+            // If it's a capture, we should have an order_id to fetch customer details
+            const relatedOrderId = captureData.supplementary_data?.related_ids?.order_id;
+
+            if (relatedOrderId) {
+                console.log(`Found related Order ID: ${relatedOrderId} for Capture: ${orderId}`);
+                const orderResponse = await fetch(`${baseUrl}/v2/checkout/orders/${relatedOrderId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (orderResponse.ok) {
+                    const orderData = await orderResponse.json();
+                    // Merge data: Order data is the base, but we inject the specific capture financials
+                    // We attach the specific capture data to the order for easy access
+                    return {
+                        ...orderData,
+                        _capture_details: captureData // Store specific capture info here
+                    };
+                }
             }
 
-            // Try v1 payments API (Sale) as second fallback
-            console.warn(`v1/payments/captures failed for ID ${orderId}, trying v1/payments/sale...`);
-            const saleResponse = await fetch(`${baseUrl}/v1/payments/sale/${orderId}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-            });
-
-            if (saleResponse.ok) {
-                return await saleResponse.json();
-            }
-
-            // If all fail, throw detailed error
-            const errorBody = await response.text();
-            throw new Error(`Failed to fetch details. Orders: ${response.status}, Captures: ${captureResponse.status}, Sale: ${saleResponse.status}. Msg: ${errorBody.substring(0, 100)}`);
+            // If no order ID or order fetch fails, return capture data (better than nothing)
+            return captureData;
         }
 
-        return await response.json();
+        // 2. If Capture failed (404), maybe it IS an Order ID
+        console.warn(`v2/payments/captures failed for ID ${orderId}, trying v2/checkout/orders...`);
+        const orderResponse = await fetch(`${baseUrl}/v2/checkout/orders/${orderId}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (orderResponse.ok) {
+            return await orderResponse.json();
+        }
+
+        // 3. Fallback: Try v1 payments (Sale) just in case
+        console.warn(`v2/checkout/orders failed for ID ${orderId}, trying v1/payments/sale...`);
+        const saleResponse = await fetch(`${baseUrl}/v1/payments/sale/${orderId}`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (saleResponse.ok) {
+            return await saleResponse.json();
+        }
+
+        // If all fail, throw detailed error
+        throw new Error(`Failed to fetch details. Capture: ${captureResponse.status}, Order: ${orderResponse.status}, Sale: ${saleResponse.status}`);
     } catch (error) {
         console.error('Error fetching PayPal order details:', error);
         throw error;

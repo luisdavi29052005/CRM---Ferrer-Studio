@@ -12,6 +12,12 @@ interface DashboardFinancesProps {
 
 export const DashboardFinances: React.FC<DashboardFinancesProps> = ({ leads }) => {
     const { t } = useTranslation();
+
+    // Skeleton Component
+    const Skeleton = ({ className }: { className?: string }) => (
+        <div className={`animate-pulse bg-white/5 rounded ${className}`} />
+    );
+
     const [payPalData, setPayPalData] = useState<PayPalDashboardData | null>(null);
     const [loadingPayPal, setLoadingPayPal] = useState(true);
     const [dateRange, setDateRange] = useState<'30d' | '90d' | 'ytd' | '1y'>('30d');
@@ -131,8 +137,54 @@ export const DashboardFinances: React.FC<DashboardFinancesProps> = ({ leads }) =
                 {/* Content Area with Loading State */}
                 <div className={`relative transition-all duration-300 ${loadingPayPal && payPalData ? 'opacity-50 pointer-events-none' : ''}`}>
                     {loadingPayPal && !payPalData ? (
-                        <div className="flex justify-center items-center h-64">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                        <div className="space-y-8 animate-in fade-in duration-500">
+                            {/* Summary Cards Skeleton */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+                                {[...Array(4)].map((_, i) => (
+                                    <div key={i} className="flex flex-col gap-2">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <Skeleton className="w-4 h-4 rounded-full" />
+                                            <Skeleton className="w-24 h-3" />
+                                        </div>
+                                        <Skeleton className="w-32 h-8" />
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                {/* Chart Skeleton */}
+                                <div className="lg:col-span-1 h-[300px] flex flex-col">
+                                    <Skeleton className="w-32 h-4 mb-4" />
+                                    <Skeleton className="w-full flex-1 rounded-xl" />
+                                </div>
+
+                                {/* Table Skeleton */}
+                                <div className="lg:col-span-2 flex flex-col h-[300px]">
+                                    <Skeleton className="w-40 h-4 mb-4" />
+                                    <div className="flex-1 border border-white/5 rounded-xl overflow-hidden">
+                                        {/* Header */}
+                                        <div className="h-10 border-b border-white/5 bg-white/5 flex items-center px-4 gap-4">
+                                            <Skeleton className="w-16 h-3" />
+                                            <Skeleton className="w-24 h-3" />
+                                            <Skeleton className="w-16 h-3 ml-auto" />
+                                            <Skeleton className="w-16 h-3" />
+                                            <Skeleton className="w-16 h-3" />
+                                            <Skeleton className="w-16 h-3" />
+                                        </div>
+                                        {/* Rows */}
+                                        {[...Array(5)].map((_, i) => (
+                                            <div key={i} className="h-12 border-b border-white/5 flex items-center px-4 gap-4">
+                                                <Skeleton className="w-20 h-3" />
+                                                <Skeleton className="w-32 h-3" />
+                                                <Skeleton className="w-16 h-3 ml-auto" />
+                                                <Skeleton className="w-16 h-3" />
+                                                <Skeleton className="w-16 h-3" />
+                                                <Skeleton className="w-20 h-5 rounded-full" />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     ) : payPalData ? (
                         <div className="space-y-8">

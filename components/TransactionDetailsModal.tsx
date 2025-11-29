@@ -47,18 +47,19 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: currency }).format(parseFloat(amount));
     };
 
+    // Skeleton Component
+    const Skeleton = ({ className }: { className?: string }) => (
+        <div className={`animate-pulse bg-white/5 rounded ${className}`} />
+    );
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div
                 className="bg-[#09090b] border border-white/10 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
                 onClick={(e) => e.stopPropagation()}
             >
-                {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-white/5 bg-white/[0.02]">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                            <Receipt className="text-blue-400" size={20} />
-                        </div>
                         <div>
                             <h2 className="text-lg font-semibold text-zinc-100">Transaction Details</h2>
                             <p className="text-xs text-zinc-500 font-mono mt-0.5">{transactionId}</p>
@@ -74,12 +75,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
 
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-                    {loading ? (
-                        <div className="flex flex-col items-center justify-center py-12 gap-3 text-zinc-500">
-                            <Loader2 className="animate-spin" size={32} />
-                            <p className="text-sm">Loading details...</p>
-                        </div>
-                    ) : error ? (
+                    {error ? (
                         <div className="flex flex-col items-center justify-center py-12 gap-3 text-rose-400">
                             <AlertCircle size={32} />
                             <p className="text-sm">{error}</p>
@@ -90,24 +86,32 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                 Retry
                             </button>
                         </div>
-                    ) : orderDetails ? (
+                    ) : (
                         <div className="space-y-8">
                             {/* Status Banner */}
-                            <div className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 rounded-lg">
-                                <div className="flex flex-col">
+                            <div className="flex items-center justify-between py-2">
+                                <div className="flex flex-col gap-1">
                                     <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Status</span>
-                                    <span className={`text-sm font-semibold capitalize ${orderDetails.status === 'COMPLETED' || orderDetails.status === 'APPROVED' ? 'text-emerald-400' :
-                                        orderDetails.status === 'PENDING' ? 'text-amber-400' : 'text-zinc-300'
-                                        }`}>
-                                        {orderDetails.status?.toLowerCase()}
-                                    </span>
+                                    {loading ? (
+                                        <Skeleton className="h-5 w-24" />
+                                    ) : (
+                                        <span className={`text-sm font-semibold capitalize ${orderDetails?.status === 'COMPLETED' || orderDetails?.status === 'APPROVED' ? 'text-emerald-400' :
+                                            orderDetails?.status === 'PENDING' ? 'text-amber-400' : 'text-zinc-300'
+                                            }`}>
+                                            {orderDetails?.status?.toLowerCase()}
+                                        </span>
+                                    )}
                                 </div>
-                                <div className="flex flex-col items-end">
+                                <div className="flex flex-col items-end gap-1">
                                     <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Total Amount</span>
-                                    <span className="text-xl font-bold text-zinc-100">
-                                        {orderDetails.purchase_units?.[0]?.amount?.value &&
-                                            formatCurrency(orderDetails.purchase_units[0].amount.value, orderDetails.purchase_units[0].amount.currency_code)}
-                                    </span>
+                                    {loading ? (
+                                        <Skeleton className="h-7 w-32" />
+                                    ) : (
+                                        <span className="text-xl font-bold text-zinc-100">
+                                            {orderDetails?.purchase_units?.[0]?.amount?.value &&
+                                                formatCurrency(orderDetails.purchase_units[0].amount.value, orderDetails.purchase_units[0].amount.currency_code)}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 
@@ -115,32 +119,75 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                 {/* Customer Info */}
                                 <div className="space-y-4">
                                     <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2 pb-2 border-b border-white/5">
-                                        <User size={14} /> Customer Information
+                                        <User size={14} strokeWidth={1.5} /> Customer Information
                                     </h3>
                                     <div className="space-y-3">
                                         <div>
-                                            <p className="text-xs text-zinc-500">Name</p>
-                                            <p className="text-sm text-zinc-200 font-medium">
-                                                {orderDetails.payer?.name?.given_name} {orderDetails.payer?.name?.surname}
-                                            </p>
+                                            <p className="text-xs text-zinc-500 mb-1">Name</p>
+                                            {loading ? <Skeleton className="h-5 w-40" /> : (
+                                                <p className="text-sm text-zinc-200 font-medium">
+                                                    {orderDetails?.payer?.name?.given_name} {orderDetails?.payer?.name?.surname}
+                                                </p>
+                                            )}
                                         </div>
                                         <div>
-                                            <p className="text-xs text-zinc-500">Email</p>
-                                            <p className="text-sm text-zinc-200">{orderDetails.payer?.email_address}</p>
+                                            <p className="text-xs text-zinc-500 mb-1">Email</p>
+                                            {loading ? <Skeleton className="h-5 w-48" /> : (
+                                                <p className="text-sm text-zinc-200">{orderDetails?.payer?.email_address}</p>
+                                            )}
                                         </div>
-                                        <div>
-                                            <p className="text-xs text-zinc-500">Payer ID</p>
-                                            <p className="text-sm text-zinc-200 font-mono text-xs">{orderDetails.payer?.payer_id}</p>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-xs text-zinc-500 mb-1">Payer ID</p>
+                                                {loading ? <Skeleton className="h-4 w-24" /> : (
+                                                    <p className="text-sm text-zinc-200 font-mono text-xs">{orderDetails?.payer?.payer_id}</p>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-zinc-500 mb-1">Country</p>
+                                                {loading ? <Skeleton className="h-4 w-8" /> : (
+                                                    <p className="text-sm text-zinc-200">{orderDetails?.payer?.address?.country_code}</p>
+                                                )}
+                                            </div>
                                         </div>
+                                        {(loading || orderDetails?.payer?.phone?.phone_number?.national_number || orderDetails?.payment_source?.paypal?.phone_number?.national_number) && (
+                                            <div>
+                                                <p className="text-xs text-zinc-500 mb-1">Phone</p>
+                                                {loading ? <Skeleton className="h-5 w-32" /> : (
+                                                    <p className="text-sm text-zinc-200">
+                                                        {orderDetails?.payer?.phone?.phone_number?.national_number || orderDetails?.payment_source?.paypal?.phone_number?.national_number}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        )}
+                                        {(loading || orderDetails?.payment_source?.paypal?.account_status) && (
+                                            <div>
+                                                <p className="text-xs text-zinc-500 mb-1">Account Status</p>
+                                                {loading ? <Skeleton className="h-5 w-20" /> : (
+                                                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${orderDetails?.payment_source?.paypal?.account_status === 'VERIFIED'
+                                                        ? 'bg-emerald-500/10 text-emerald-400'
+                                                        : 'bg-zinc-800 text-zinc-400'
+                                                        }`}>
+                                                        {orderDetails?.payment_source?.paypal?.account_status}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
                                 {/* Shipping Info */}
                                 <div className="space-y-4">
                                     <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2 pb-2 border-b border-white/5">
-                                        <MapPin size={14} /> Shipping Address
+                                        <MapPin size={14} strokeWidth={1.5} /> Shipping Address
                                     </h3>
-                                    {orderDetails.purchase_units?.[0]?.shipping?.address ? (
+                                    {loading ? (
+                                        <div className="space-y-2">
+                                            <Skeleton className="h-4 w-3/4" />
+                                            <Skeleton className="h-4 w-full" />
+                                            <Skeleton className="h-4 w-1/2" />
+                                        </div>
+                                    ) : orderDetails?.purchase_units?.[0]?.shipping?.address ? (
                                         <div className="space-y-1 text-sm text-zinc-300">
                                             <p>{orderDetails.purchase_units[0].shipping.name?.full_name}</p>
                                             <p>{orderDetails.purchase_units[0].shipping.address.address_line_1}</p>
@@ -159,18 +206,69 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                     ) : (
                                         <p className="text-sm text-zinc-500 italic">No shipping information available</p>
                                     )}
+
+                                    {/* Additional Order Info */}
+                                    <div className="pt-4 mt-4 border-t border-white/5 space-y-3">
+                                        {(loading || orderDetails?.purchase_units?.[0]?.description) && (
+                                            <div>
+                                                <p className="text-xs text-zinc-500 mb-1">Description</p>
+                                                {loading ? <Skeleton className="h-4 w-full" /> : (
+                                                    <p className="text-sm text-zinc-300 italic">"{orderDetails?.purchase_units?.[0]?.description}"</p>
+                                                )}
+                                            </div>
+                                        )}
+                                        {(loading || orderDetails?.purchase_units?.[0]?.invoice_id) && (
+                                            <div>
+                                                <p className="text-xs text-zinc-500 mb-1">Invoice ID</p>
+                                                {loading ? <Skeleton className="h-4 w-32" /> : (
+                                                    <p className="text-sm text-zinc-300 font-mono">{orderDetails?.purchase_units?.[0]?.invoice_id}</p>
+                                                )}
+                                            </div>
+                                        )}
+                                        {(loading || orderDetails?.purchase_units?.[0]?.soft_descriptor) && (
+                                            <div>
+                                                <p className="text-xs text-zinc-500 mb-1">Soft Descriptor</p>
+                                                {loading ? <Skeleton className="h-4 w-40" /> : (
+                                                    <p className="text-sm text-zinc-300">{orderDetails?.purchase_units?.[0]?.soft_descriptor}</p>
+                                                )}
+                                            </div>
+                                        )}
+                                        {(loading || orderDetails?._capture_details?.seller_protection?.status) && (
+                                            <div>
+                                                <p className="text-xs text-zinc-500 mb-1">Seller Protection</p>
+                                                {loading ? <Skeleton className="h-5 w-24" /> : (
+                                                    <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${orderDetails?._capture_details?.seller_protection?.status === 'ELIGIBLE'
+                                                        ? 'bg-blue-500/10 text-blue-400'
+                                                        : 'bg-zinc-800 text-zinc-400'
+                                                        }`}>
+                                                        {orderDetails?._capture_details?.seller_protection?.status}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
                             {/* Items */}
                             <div className="space-y-4">
                                 <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2 pb-2 border-b border-white/5">
-                                    <Package size={14} /> Order Items
+                                    <Package size={14} strokeWidth={1.5} /> Order Items
                                 </h3>
-                                {orderDetails.purchase_units?.[0]?.items ? (
+                                {loading ? (
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between items-start py-2 border-b border-white/5">
+                                            <div className="space-y-1">
+                                                <Skeleton className="h-4 w-48" />
+                                                <Skeleton className="h-3 w-16" />
+                                            </div>
+                                            <Skeleton className="h-4 w-20" />
+                                        </div>
+                                    </div>
+                                ) : orderDetails?.purchase_units?.[0]?.items ? (
                                     <div className="space-y-2">
                                         {orderDetails.purchase_units[0].items.map((item: any, index: number) => (
-                                            <div key={index} className="flex justify-between items-start p-3 bg-white/[0.02] rounded-lg border border-white/5">
+                                            <div key={index} className="flex justify-between items-start py-2 border-b border-white/5 last:border-0">
                                                 <div>
                                                     <p className="text-sm font-medium text-zinc-200">{item.name}</p>
                                                     <p className="text-xs text-zinc-500">Qty: {item.quantity}</p>
@@ -189,45 +287,96 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                             {/* Financial Breakdown */}
                             <div className="space-y-4">
                                 <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2 pb-2 border-b border-white/5">
-                                    <CreditCard size={14} /> Financial Breakdown
+                                    <CreditCard size={14} strokeWidth={1.5} /> Financial Breakdown
                                 </h3>
-                                <div className="bg-zinc-900/50 rounded-lg p-4 space-y-2">
+                                <div className="space-y-2">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-zinc-400">Gross Amount</span>
-                                        <span className="text-zinc-200">
-                                            {orderDetails.purchase_units?.[0]?.payments?.captures?.[0]?.amount ?
-                                                formatCurrency(
-                                                    orderDetails.purchase_units[0].payments.captures[0].amount.value,
-                                                    orderDetails.purchase_units[0].payments.captures[0].amount.currency_code
-                                                ) : 'N/A'}
-                                        </span>
+                                        {loading ? <Skeleton className="h-4 w-24" /> : (
+                                            <span className="text-zinc-200">
+                                                {orderDetails?._capture_details?.seller_receivable_breakdown?.gross_amount ?
+                                                    formatCurrency(
+                                                        orderDetails._capture_details.seller_receivable_breakdown.gross_amount.value,
+                                                        orderDetails._capture_details.seller_receivable_breakdown.gross_amount.currency_code
+                                                    ) :
+                                                    orderDetails?.purchase_units?.[0]?.payments?.captures?.[0]?.amount ?
+                                                        formatCurrency(
+                                                            orderDetails.purchase_units[0].payments.captures[0].amount.value,
+                                                            orderDetails.purchase_units[0].payments.captures[0].amount.currency_code
+                                                        ) : 'N/A'}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-zinc-400">PayPal Fee</span>
-                                        <span className="text-rose-400">
-                                            {orderDetails.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.paypal_fee ?
-                                                '-' + formatCurrency(
-                                                    orderDetails.purchase_units[0].payments.captures[0].seller_receivable_breakdown.paypal_fee.value,
-                                                    orderDetails.purchase_units[0].payments.captures[0].seller_receivable_breakdown.paypal_fee.currency_code
-                                                ) : 'N/A'}
-                                        </span>
+                                        {loading ? <Skeleton className="h-4 w-20" /> : (
+                                            <span className="text-rose-400">
+                                                {orderDetails?._capture_details?.seller_receivable_breakdown?.paypal_fee ?
+                                                    '-' + formatCurrency(
+                                                        orderDetails._capture_details.seller_receivable_breakdown.paypal_fee.value,
+                                                        orderDetails._capture_details.seller_receivable_breakdown.paypal_fee.currency_code
+                                                    ) :
+                                                    orderDetails?.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.paypal_fee ?
+                                                        '-' + formatCurrency(
+                                                            orderDetails.purchase_units[0].payments.captures[0].seller_receivable_breakdown.paypal_fee.value,
+                                                            orderDetails.purchase_units[0].payments.captures[0].seller_receivable_breakdown.paypal_fee.currency_code
+                                                        ) : 'N/A'}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="pt-2 mt-2 border-t border-white/10 flex justify-between text-sm font-medium">
                                         <span className="text-zinc-300">Net Amount</span>
-                                        <span className="text-emerald-400">
-                                            {orderDetails.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.net_amount ?
-                                                formatCurrency(
-                                                    orderDetails.purchase_units[0].payments.captures[0].seller_receivable_breakdown.net_amount.value,
-                                                    orderDetails.purchase_units[0].payments.captures[0].seller_receivable_breakdown.net_amount.currency_code
-                                                ) : 'N/A'}
-                                        </span>
+                                        {loading ? <Skeleton className="h-4 w-24" /> : (
+                                            <span className="text-emerald-400">
+                                                {orderDetails?._capture_details?.seller_receivable_breakdown?.net_amount ?
+                                                    formatCurrency(
+                                                        orderDetails._capture_details.seller_receivable_breakdown.net_amount.value,
+                                                        orderDetails._capture_details.seller_receivable_breakdown.net_amount.currency_code
+                                                    ) :
+                                                    orderDetails?.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.net_amount ?
+                                                        formatCurrency(
+                                                            orderDetails.purchase_units[0].payments.captures[0].seller_receivable_breakdown.net_amount.value,
+                                                            orderDetails.purchase_units[0].payments.captures[0].seller_receivable_breakdown.net_amount.currency_code
+                                                        ) : 'N/A'}
+                                            </span>
+                                        )}
                                     </div>
+
+                                    {/* Exchange Rate Info */}
+                                    {(loading || orderDetails?._capture_details?.seller_receivable_breakdown?.exchange_rate ||
+                                        orderDetails?.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.exchange_rate) && (
+                                            <div className="pt-2 mt-2 border-t border-white/10 space-y-1">
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-zinc-500">Exchange Rate</span>
+                                                    {loading ? <Skeleton className="h-3 w-32" /> : (
+                                                        <span className="text-zinc-400">
+                                                            1 {orderDetails?._capture_details?.seller_receivable_breakdown?.exchange_rate?.source_currency || orderDetails?.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.exchange_rate?.source_currency} = {' '}
+                                                            {orderDetails?._capture_details?.seller_receivable_breakdown?.exchange_rate?.value || orderDetails?.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.exchange_rate?.value} {' '}
+                                                            {orderDetails?._capture_details?.seller_receivable_breakdown?.exchange_rate?.target_currency || orderDetails?.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.exchange_rate?.target_currency}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="flex justify-between text-sm font-medium">
+                                                    <span className="text-zinc-300">Converted Amount</span>
+                                                    {loading ? <Skeleton className="h-4 w-28" /> : (
+                                                        <span className="text-blue-400">
+                                                            {orderDetails?._capture_details?.seller_receivable_breakdown?.receivable_amount ?
+                                                                formatCurrency(
+                                                                    orderDetails._capture_details.seller_receivable_breakdown.receivable_amount.value,
+                                                                    orderDetails._capture_details.seller_receivable_breakdown.receivable_amount.currency_code
+                                                                ) :
+                                                                orderDetails?.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.receivable_amount ?
+                                                                    formatCurrency(
+                                                                        orderDetails.purchase_units[0].payments.captures[0].seller_receivable_breakdown.receivable_amount.value,
+                                                                        orderDetails.purchase_units[0].payments.captures[0].seller_receivable_breakdown.receivable_amount.currency_code
+                                                                    ) : 'N/A'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                 </div>
                             </div>
-                        </div>
-                    ) : (
-                        <div className="text-center text-zinc-500 py-12">
-                            No details found.
                         </div>
                     )}
                 </div>

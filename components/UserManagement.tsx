@@ -14,6 +14,12 @@ interface Profile {
 
 export const UserManagement: React.FC = () => {
     const { t } = useTranslation();
+
+    // Skeleton Component
+    const Skeleton = ({ className }: { className?: string }) => (
+        <div className={`animate-pulse bg-white/5 rounded ${className}`} />
+    );
+
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -48,8 +54,47 @@ export const UserManagement: React.FC = () => {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-64">
-                <Loader2 className="w-8 h-8 text-bronze-500 animate-spin" />
+            <div className="p-8 h-full flex flex-col overflow-hidden animate-in fade-in duration-500">
+                {/* Header Skeleton */}
+                <div className="flex items-end justify-between mb-8 pb-6 border-b border-white/5">
+                    <div>
+                        <Skeleton className="w-48 h-8 mb-2" />
+                        <Skeleton className="w-64 h-4" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Skeleton className="w-20 h-4" />
+                        <Skeleton className="w-8 h-4" />
+                    </div>
+                </div>
+
+                {/* Table Skeleton */}
+                <div className="flex-1 flex flex-col min-h-0">
+                    <div className="overflow-auto custom-scrollbar flex-1 -mx-4 px-4">
+                        <div className="w-full">
+                            {/* Table Header */}
+                            <div className="flex items-center border-b border-white/5 pb-3 px-4 mb-4">
+                                <Skeleton className="w-24 h-3 mr-auto" />
+                                <Skeleton className="w-16 h-3 mx-4" />
+                                <Skeleton className="w-16 h-3 mx-4" />
+                                <Skeleton className="w-20 h-3 mx-4" />
+                                <Skeleton className="w-16 h-3 ml-auto" />
+                            </div>
+                            {/* Table Rows */}
+                            {[...Array(5)].map((_, i) => (
+                                <div key={i} className="flex items-center py-4 px-4 border-b border-white/5">
+                                    <div className="flex items-center gap-3 flex-1">
+                                        <Skeleton className="w-8 h-8 rounded-full" />
+                                        <Skeleton className="w-40 h-4" />
+                                    </div>
+                                    <Skeleton className="w-20 h-4 mx-4" />
+                                    <Skeleton className="w-16 h-5 rounded mx-4" />
+                                    <Skeleton className="w-24 h-3 mx-4" />
+                                    <Skeleton className="w-16 h-6 rounded ml-auto" />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
             </div>
         );
     }
