@@ -79,7 +79,35 @@ export interface PayPalDashboardData {
     };
     chartData: { date: string; amount: number }[];
     transactions: PayPalTransaction[];
+    salesByCountry: { countryCode: string; amount: number; count: number }[];
 }
+
+// Cache for exchange rates to avoid hitting API limit
+let exchangeRatesCache: { rates: any; timestamp: number } | null = null;
+
+const fetchExchangeRates = async () => {
+    // Return cached if less than 1 hour old
+    if (exchangeRatesCache && (Date.now() - exchangeRatesCache.timestamp < 3600000)) {
+        return exchangeRatesCache.rates;
+    }
+
+    try {
+        const response = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
+        if (!response.ok) throw new Error('Failed to fetch exchange rates');
+        const data = await response.json();
+
+        exchangeRatesCache = {
+            rates: data.rates,
+            timestamp: Date.now()
+        };
+
+        return data.rates;
+    } catch (error) {
+        console.error('Error fetching exchange rates:', error);
+        // Fallback rates if API fails
+        return { USD: 1, EUR: 0.92, GBP: 0.79, BRL: 5.0 };
+    }
+};
 
 export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1y' = '30d'): Promise<PayPalDashboardData> => {
     try {
@@ -88,6 +116,10 @@ export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1
         const baseUrl = environment === 'PRODUCTION'
             ? 'https://api-m.paypal.com'
             : 'https://api-m.sandbox.paypal.com';
+
+        // Fetch exchange rates
+        const rates = await fetchExchangeRates();
+        const SPREAD = 0.045; // 4.5% spread for currency conversion
 
         // Calculate date range
         let endDate = new Date();
@@ -170,33 +202,53 @@ export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1
             const txCurrency = info.transaction_amount?.currency_code;
             const fee = parseFloat(info.fee_amount?.value || '0');
 
-            if (txCurrency === 'USD') {
-                const date = info.transaction_initiation_date.split('T')[0];
+            const date = info.transaction_initiation_date.split('T')[0];
 
-                transactions.push({
-                    id: info.transaction_id,
-                    date: info.transaction_initiation_date,
-                    status: info.transaction_status,
-                    gross: amount,
-                    fee: fee,
-                    net: amount + fee,
-                    currency: txCurrency,
-                    customerName: payer.payer_name?.alternate_full_name || 'N/A',
-                    customerEmail: payer.email_address || 'N/A',
-                    invoiceId: info.invoice_id
-                });
+            const customerName = payer.payer_name?.alternate_full_name || 'N/A';
 
-                if (amount > 0) {
-                    grossTotal += amount;
-                    feeTotal += Math.abs(fee);
-                    netTotal += (amount + fee);
-                    transactionCount++;
+            // Skip transactions with no customer name (N/A) as per user request
+            // These are often internal movements or withdrawals that shouldn't count towards revenue
+            if (customerName === 'N/A') {
+                return;
+            }
 
-                    if (dailyEarnings[date]) {
-                        dailyEarnings[date] += amount;
-                    } else {
-                        dailyEarnings[date] = amount;
+            transactions.push({
+                id: info.transaction_id,
+                date: info.transaction_initiation_date,
+                status: info.transaction_status,
+                gross: amount,
+                fee: fee,
+                net: amount + fee,
+                currency: txCurrency,
+                customerName: customerName,
+                customerEmail: payer.email_address || 'N/A',
+                invoiceId: info.invoice_id
+            });
+
+            if (amount > 0) {
+                // Convert to USD if needed
+                let amountUSD = amount;
+                let feeUSD = fee;
+
+                if (txCurrency !== 'USD') {
+                    const rate = rates[txCurrency];
+                    if (rate) {
+                        // Convert to USD: Amount / Rate
+                        // Apply Spread: * (1 - SPREAD)
+                        amountUSD = (amount / rate) * (1 - SPREAD);
+                        feeUSD = (fee / rate) * (1 - SPREAD); // Fee is usually negative, so logic holds
                     }
+                }
+
+                grossTotal += amountUSD;
+                feeTotal += Math.abs(feeUSD);
+                netTotal += (amountUSD + feeUSD);
+                transactionCount++;
+
+                if (dailyEarnings[date]) {
+                    dailyEarnings[date] += amountUSD;
+                } else {
+                    dailyEarnings[date] = amountUSD;
                 }
             }
         });
@@ -220,6 +272,40 @@ export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1
 
         const avgTicket = transactionCount > 0 ? grossTotal / transactionCount : 0;
 
+        // Aggregate sales by country
+        const salesByCountryMap: { [key: string]: { amount: number, count: number } } = {};
+
+        allTransactions.forEach((tx: any) => {
+            const amount = parseFloat(tx.transaction_info.transaction_amount?.value || '0');
+            const txCurrency = tx.transaction_info.transaction_amount?.currency_code;
+            const country = tx.payer_info?.country_code || tx.shipping_info?.address?.country_code || 'Unknown';
+
+            if (amount > 0) {
+                // Convert to USD for the map aggregation too
+                let amountUSD = amount;
+                if (txCurrency !== 'USD') {
+                    const rate = rates[txCurrency];
+                    if (rate) {
+                        amountUSD = (amount / rate) * (1 - SPREAD);
+                    }
+                }
+
+                if (!salesByCountryMap[country]) {
+                    salesByCountryMap[country] = { amount: 0, count: 0 };
+                }
+                salesByCountryMap[country].amount += amountUSD;
+                salesByCountryMap[country].count += 1;
+            }
+        });
+
+        const salesByCountry = Object.entries(salesByCountryMap)
+            .map(([countryCode, data]) => ({
+                countryCode,
+                amount: data.amount,
+                count: data.count
+            }))
+            .sort((a, b) => b.amount - a.amount);
+
         return {
             summary: {
                 grossTotal,
@@ -229,9 +315,9 @@ export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1
                 avgTicket,
                 currency
             },
+            salesByCountry,
             chartData,
             transactions: transactions
-                .filter(t => t.customerName !== 'N/A')
                 .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
         };
 

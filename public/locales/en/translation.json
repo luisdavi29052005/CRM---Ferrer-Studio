@@ -74,6 +74,7 @@
         "no_activity": "No recent activity",
         "lead_pipeline_revenue": "Lead Pipeline Revenue (BRL)",
         "international_sales": "International Sales (PayPal)",
+        "sales_by_country": "Sales by Country",
         "gross_revenue": "Gross Revenue",
         "paypal_fees": "PayPal Fees",
         "net_revenue": "Net Revenue",
@@ -96,39 +97,9 @@
             "status": "Status",
             "no_transactions": "No transactions found in this period.",
             "no_international_transactions": "No international transactions found."
-        }
-    },
-    "leads": {
-        "title": "Leads Management",
-        "subtitle": "Track and manage your potential customers",
-        "total_leads": "Total Leads",
-        "all_leads": "All Leads",
-        "add_lead": "Add Lead",
-        "search_placeholder": "Search leads...",
-        "table": {
-            "lead_details": "Lead Details",
-            "status": "Status",
-            "value": "Value",
-            "temperature": "Temperature",
-            "ai_score": "AI Score",
-            "last_contact": "Last Contact",
-            "actions": "Actions"
         },
-        "stages": {
-            "new": "New",
-            "contacted": "Contacted",
-            "qualified": "Qualified",
-            "proposal": "Proposal",
-            "negotiation": "Negotiation",
-            "won": "Won",
-            "lost": "Lost",
-            "in_negotiation": "In Negotiation"
-        },
-        "temperature": {
-            "hot": "Hot",
-            "warm": "Warm",
-            "cold": "Cold"
-        }
+        "no_sales": "No sales",
+        "top_5_countries": "Top 5 Countries by Sales"
     },
     "chat": {
         "title": "Live Chat",
@@ -149,6 +120,38 @@
             "ai_score": "AI Score",
             "notes": "Notes",
             "save_notes": "Save Notes"
+        }
+    },
+    "leads": {
+        "title": "Leads Management",
+        "subtitle": "Track and manage your potential customers",
+        "total_leads": "Total Leads",
+        "all_leads": "All Leads",
+        "add_lead": "Add Lead",
+        "search_placeholder": "Search leads...",
+        "table": {
+            "name": "Lead Details",
+            "status": "Status",
+            "value": "Value",
+            "temp": "Temperature",
+            "ai_score": "AI Score",
+            "last_contact": "Last Contact",
+            "actions": "Actions"
+        },
+        "stages": {
+            "new": "New",
+            "contacted": "Contacted",
+            "qualified": "Qualified",
+            "proposal": "Proposal",
+            "negotiation": "Negotiation",
+            "won": "Won",
+            "lost": "Lost",
+            "in_negotiation": "In Negotiation"
+        },
+        "temperature": {
+            "hot": "Hot",
+            "warm": "Warm",
+            "cold": "Cold"
         }
     },
     "imports": {

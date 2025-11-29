@@ -32,6 +32,25 @@
         "system_status": "Status do Sistema",
         "waha_api": "API WAHA",
         "n8n_workflow": "Fluxo n8n",
+        "online": "Online",
+        "active": "Ativo"
+    },
+    "header": {
+        "overview": "Visão Geral",
+        "whatsapp_connected": "WhatsApp Conectado",
+        "whatsapp_starting": "Iniciando...",
+        "whatsapp_disconnected": "WhatsApp Desconectado"
+    },
+    "pending": {
+        "title": "Acesso Pendente",
+        "message": "Sua conta está aguardando aprovação do administrador. Você será notificado assim que seu acesso for concedido.",
+        "sign_out_button": "Sair"
+    },
+    "login": {
+        "title": "Bem-vindo de volta",
+        "subtitle": "Entre na sua conta para continuar",
+        "email_label": "Endereço de Email",
+        "email_placeholder": "nome@empresa.com",
         "password_label": "Senha",
         "password_placeholder": "Digite sua senha",
         "sign_in": "Entrar",
@@ -40,11 +59,6 @@
         "google_button": "Google",
         "terms_prefix": "Ao entrar, você concorda com nossos",
         "terms_link": "Termos de Serviço"
-    },
-    "pending": {
-        "title": "Acesso Pendente",
-        "message": "Sua conta está aguardando aprovação do administrador. Você será notificado assim que seu acesso for concedido.",
-        "sign_out_button": "Sair"
     },
     "dashboard": {
         "title": "Painel de Controle",
@@ -58,10 +72,11 @@
         "recent_activity": "Atividade Recente",
         "view_all": "Ver Tudo",
         "no_activity": "Nenhuma atividade recente",
-        "lead_pipeline_revenue": "Receita do Pipeline de Leads (BRL)",
-        "international_sales": "Vendas Internacionais (PayPal)",
+        "lead_pipeline_revenue": "Receita do Pipeline de Leads",
+        "international_sales": "Vendas Internacionais",
+        "sales_by_country": "Vendas por País",
         "gross_revenue": "Receita Bruta",
-        "paypal_fees": "Taxas PayPal",
+        "paypal_fees": "Taxas",
         "net_revenue": "Receita Líquida",
         "sales_count": "Contagem de Vendas",
         "earnings_trend": "Tendência de Ganhos",
@@ -82,39 +97,9 @@
             "status": "Status",
             "no_transactions": "Nenhuma transação encontrada neste período.",
             "no_international_transactions": "Nenhuma transação internacional encontrada."
-        }
-    },
-    "leads": {
-        "title": "Gerenciamento de Leads",
-        "subtitle": "Acompanhe e gerencie seus clientes potenciais",
-        "total_leads": "Total de Leads",
-        "all_leads": "Todos os Leads",
-        "add_lead": "Adicionar Lead",
-        "search_placeholder": "Buscar leads...",
-        "table": {
-            "lead_details": "Detalhes do Lead",
-            "status": "Status",
-            "value": "Valor",
-            "temperature": "Temperatura",
-            "ai_score": "Pontuação IA",
-            "last_contact": "Último Contato",
-            "actions": "Ações"
         },
-        "stages": {
-            "new": "Novo",
-            "contacted": "Contatado",
-            "qualified": "Qualificado",
-            "proposal": "Proposta",
-            "negotiation": "Negociação",
-            "won": "Ganho",
-            "lost": "Perdido",
-            "in_negotiation": "Em Negociação"
-        },
-        "temperature": {
-            "hot": "Quente",
-            "warm": "Morno",
-            "cold": "Frio"
-        }
+        "no_sales": "Sem vendas",
+        "top_5_countries": "5 principais países por vendas"
     },
     "chat": {
         "title": "Chat ao Vivo",
@@ -135,6 +120,38 @@
             "ai_score": "Pontuação IA",
             "notes": "Notas",
             "save_notes": "Salvar Notas"
+        }
+    },
+    "leads": {
+        "title": "Gerenciamento de Leads",
+        "subtitle": "Acompanhe e gerencie seus clientes potenciais",
+        "total_leads": "Total de Leads",
+        "all_leads": "Todos os Leads",
+        "add_lead": "Adicionar Lead",
+        "search_placeholder": "Buscar leads...",
+        "table": {
+            "name": "Detalhes do Lead",
+            "status": "Status",
+            "value": "Valor",
+            "temp": "Temperatura",
+            "ai_score": "Pontuação IA",
+            "last_contact": "Último Contato",
+            "actions": "Ações"
+        },
+        "stages": {
+            "new": "Novo",
+            "contacted": "Contatado",
+            "qualified": "Qualificado",
+            "proposal": "Proposta",
+            "negotiation": "Negociação",
+            "won": "Ganho",
+            "lost": "Perdido",
+            "in_negotiation": "Em Negociação"
+        },
+        "temperature": {
+            "hot": "Quente",
+            "warm": "Morno",
+            "cold": "Frio"
         }
     },
     "imports": {
