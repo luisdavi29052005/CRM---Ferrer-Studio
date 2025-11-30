@@ -112,6 +112,32 @@ app.post('/webhook', async (req, res) => {
     res.status(200).send('OK');
 });
 
+app.get('/api/contacts/profile-picture', async (req, res) => {
+    const { contactId, session = 'default' } = req.query;
+
+    if (!contactId) {
+        return res.status(400).json({ error: 'Missing contactId' });
+    }
+
+    try {
+        const wahaUrl = `http://localhost:3000/api/contacts/${encodeURIComponent(contactId)}/profile-picture?session=${session}`;
+        console.log(`Fetching profile picture from: ${wahaUrl}`);
+
+        const response = await fetch(wahaUrl);
+
+        if (!response.ok) {
+            console.error(`Error fetching profile picture from WAHA: ${response.status} ${response.statusText}`);
+            return res.status(response.status).json({ error: 'Failed to fetch from WAHA' });
+        }
+
+        const data = await response.json();
+        res.json(data);
+    } catch (error) {
+        console.error('Error in /api/contacts/profile-picture:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
 app.post('/api/test', (req, res) => {
     console.log('Test endpoint hit', req.body);
     res.json({ message: 'Server is working' });

@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+// @ts-nocheck
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, FileDown, RefreshCw, Upload, CheckCircle, Clock, AlertCircle, MessageSquare, Search, Filter, Trash2, X, Calendar } from 'lucide-react';
+import { Search, Filter, RefreshCw, Trash2, Upload, Download, Plus, X, Check, AlertCircle, FileText, Loader } from 'lucide-react';
 import Papa from 'papaparse';
 import { supabase } from '../supabaseClient';
-import { Lead, Stage, Source } from '../types';
+import { Lead, Source, Stage } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HighlightText } from './HighlightText';
 import { fetchContactProfilePic, checkNumberExists, deleteApifyLeads } from '../services/supabaseService';

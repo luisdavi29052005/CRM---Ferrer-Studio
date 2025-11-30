@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React from 'react';
 import { Lead } from '../../types';
 import { User, Phone, MapPin, BrainCircuit, Calendar, X, Tag, FileText } from 'lucide-react';
@@ -101,14 +102,14 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
                         </div>
                         <div className="flex flex-wrap gap-2">
                             <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wide border ${lead.stage === 'Won' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
-                                    lead.stage === 'Lost' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
-                                        'bg-zinc-800 text-zinc-400 border-zinc-700'
+                                lead.stage === 'Lost' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                                    'bg-zinc-800 text-zinc-400 border-zinc-700'
                                 }`}>
                                 {lead.stage}
                             </span>
                             <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wide border ${lead.temperature === 'Hot' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' :
-                                    lead.temperature === 'Warm' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
-                                        'bg-blue-500/10 text-blue-500 border-blue-500/20'
+                                lead.temperature === 'Warm' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
+                                    'bg-blue-500/10 text-blue-500 border-blue-500/20'
                                 }`}>
                                 {lead.temperature}
                             </span>

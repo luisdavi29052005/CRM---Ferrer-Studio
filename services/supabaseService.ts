@@ -229,7 +229,7 @@ export const fetchContactProfilePic = async (chatId: string): Promise<string | n
             formattedId = `${chatId.replace(/\D/g, '')}@c.us`;
         }
 
-        const response = await fetch(`http://localhost:3000/api/contacts/profile-picture?contactId=${encodeURIComponent(formattedId)}&refresh=false&session=default`);
+        const response = await fetch(`http://localhost:3001/api/contacts/profile-picture?contactId=${encodeURIComponent(formattedId)}&refresh=false&session=default`);
         if (response.ok) {
             const data = await response.json();
             return data.profilePictureURL || null;
