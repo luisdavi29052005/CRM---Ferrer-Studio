@@ -14,7 +14,9 @@ export default defineConfig(({ mode }) => {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.PAYPAL_ACCESS_TOKEN': JSON.stringify(env.PAYPAL_ACCESS_TOKEN),
-      'process.env.PAYPAL_ENVIRONMENT': JSON.stringify(env.PAYPAL_ENVIRONMENT)
+      'process.env.PAYPAL_ENVIRONMENT': JSON.stringify(env.PAYPAL_ENVIRONMENT),
+      'process.env.PAYPAL_CLIENT_ID': JSON.stringify(env.PAYPAL_CLIENT_ID),
+      'process.env.PAYPAL_SECRET': JSON.stringify(env.PAYPAL_SECRET)
     },
     resolve: {
       alias: {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Users, MessageSquare, Database, Zap, Bell, ChevronDown, Activity, ArrowRight, Lock, Mail, LogOut, Settings, User } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Database, Zap, Bell, ChevronDown, Activity, ArrowRight, Lock, Mail, LogOut, Settings as SettingsIcon, User } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Dashboard } from './components/Dashboard';
 import { Leads } from './components/Leads';
@@ -8,12 +8,14 @@ import { Chat } from './components/Chat';
 import { ApifyImports } from './components/ApifyImports';
 import { Automation } from './components/Automation';
 import { UserManagement } from './components/UserManagement';
+import { Profile } from './components/Profile';
+import { Settings } from './components/Settings';
 import { Lead, ApifyLead, WahaChat, AutomationFlow, ActivityItem } from './types';
 import { fetchLeads, fetchApifyLeads, fetchWahaChats, fetchAutomations, authActions, fetchChartData, checkWahaStatus, updateProfile, fetchRecentActivity } from './services/supabaseService';
 import { supabase } from './supabaseClient';
 import { GridBackground } from './components/GridBackground';
 
-type View = 'dashboard' | 'leads' | 'chat' | 'apify' | 'automation' | 'users';
+type View = 'dashboard' | 'leads' | 'chat' | 'apify' | 'automation' | 'users' | 'profile' | 'settings';
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
@@ -237,7 +239,7 @@ const App = () => {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log("Auth event:", event, "Has session:", !!session);
+
 
       // Handle initial session check
       if (event === 'INITIAL_SESSION' && !authInitialized.current) {
@@ -349,6 +351,54 @@ const App = () => {
         setActivity(fetchedActivity);
       };
       loadData();
+
+      // Realtime Subscription for Chats (Sidebar Updates)
+      const chatSubscription = supabase
+        .channel('public:whatsapp_waha_chats')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'whatsapp_waha_chats' },
+          (payload) => {
+            console.log('Chat update received:', payload);
+            if (payload.eventType === 'INSERT') {
+              setWahaChats(prev => {
+                const newChat = payload.new as any;
+                const mappedChat: WahaChat = {
+                  id: newChat.id.toString(),
+                  chatID: newChat.chat_jid,
+                  push_name: newChat.name || newChat.chat_jid,
+                  last_text: newChat.last_message || '',
+                  last_from_me: newChat.last_message_from_me || false,
+                  last_timestamp: newChat.last_message_at ? new Date(newChat.last_message_at).getTime() : Date.now(),
+                  status: 'received', // Default status for new chat
+                  unreadCount: newChat.unread_count || 0
+                };
+                return [mappedChat, ...prev];
+              });
+            } else if (payload.eventType === 'UPDATE') {
+              setWahaChats(prev => prev.map(c => {
+                if (c.id === payload.new.id.toString()) {
+                  const updated = payload.new as any;
+                  return {
+                    ...c,
+                    chatID: updated.chat_jid,
+                    push_name: updated.name || c.push_name,
+                    last_text: updated.last_message || c.last_text,
+                    last_from_me: updated.last_message_from_me !== undefined ? updated.last_message_from_me : c.last_from_me,
+                    last_timestamp: updated.last_message_at ? new Date(updated.last_message_at).getTime() : c.last_timestamp,
+                    unreadCount: updated.unread_count !== undefined ? updated.unread_count : c.unreadCount
+                  };
+                }
+                return c;
+              }));
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(chatSubscription);
+      };
     }
   }, [isAuthenticated]);
 
@@ -358,7 +408,7 @@ const App = () => {
     setActiveView('chat');
   };
 
-  const SidebarItem = ({ view, icon: Icon, label }: { view: View; icon: any; label: string }) => (
+  const SidebarItem = ({ view, icon: Icon, label, activeView, setActiveView }: any) => (
     <button
       onClick={() => setActiveView(view)}
       className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${activeView === view
@@ -431,87 +481,16 @@ const App = () => {
                 </div>
 
                 <nav className="space-y-1">
-                  <button
-                    onClick={() => setActiveView('dashboard')}
-                    className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${activeView === 'dashboard'
-                      ? 'text-zinc-100'
-                      : 'text-zinc-500 hover:text-zinc-300'
-                      }`}
-                  >
-                    {activeView === 'dashboard' && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)]"></div>
-                    )}
-                    <LayoutDashboard strokeWidth={1.5} size={18} className={`transition-transform duration-300 ${activeView === 'dashboard' ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
-                    <span className="tracking-wide">{t('sidebar.dashboard')}</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveView('leads')}
-                    className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${activeView === 'leads'
-                      ? 'text-zinc-100'
-                      : 'text-zinc-500 hover:text-zinc-300'
-                      }`}
-                  >
-                    {activeView === 'leads' && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)]"></div>
-                    )}
-                    <Users strokeWidth={1.5} size={18} className={`transition-transform duration-300 ${activeView === 'leads' ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
-                    <span className="tracking-wide">{t('sidebar.leads')}</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveView('chat')}
-                    className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${activeView === 'chat'
-                      ? 'text-zinc-100'
-                      : 'text-zinc-500 hover:text-zinc-300'
-                      }`}
-                  >
-                    {activeView === 'chat' && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)]"></div>
-                    )}
-                    <MessageSquare strokeWidth={1.5} size={18} className={`transition-transform duration-300 ${activeView === 'chat' ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
-                    <span className="tracking-wide">{t('sidebar.chat')}</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveView('apify')}
-                    className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${activeView === 'apify'
-                      ? 'text-zinc-100'
-                      : 'text-zinc-500 hover:text-zinc-300'
-                      }`}
-                  >
-                    {activeView === 'apify' && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)]"></div>
-                    )}
-                    <Database strokeWidth={1.5} size={18} className={`transition-transform duration-300 ${activeView === 'apify' ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
-                    <span className="tracking-wide">{t('sidebar.imports')}</span>
-                  </button>
-                  <button
-                    onClick={() => setActiveView('automation')}
-                    className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${activeView === 'automation'
-                      ? 'text-zinc-100'
-                      : 'text-zinc-500 hover:text-zinc-300'
-                      }`}
-                  >
-                    {activeView === 'automation' && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)]"></div>
-                    )}
-                    <Zap strokeWidth={1.5} size={18} className={`transition-transform duration-300 ${activeView === 'automation' ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
-                    <span className="tracking-wide">{t('sidebar.automation')}</span>
-                  </button>
+                  <SidebarItem view="dashboard" icon={LayoutDashboard} label={t('sidebar.dashboard')} activeView={activeView} setActiveView={setActiveView} />
+                  <SidebarItem view="leads" icon={Users} label={t('sidebar.leads')} activeView={activeView} setActiveView={setActiveView} />
+                  <SidebarItem view="chat" icon={MessageSquare} label={t('sidebar.chat')} activeView={activeView} setActiveView={setActiveView} />
+                  <SidebarItem view="apify" icon={Database} label={t('sidebar.imports')} activeView={activeView} setActiveView={setActiveView} />
+                  <SidebarItem view="automation" icon={Zap} label={t('sidebar.automation')} activeView={activeView} setActiveView={setActiveView} />
+
                   {isAdmin && (
                     <>
                       <div className="my-8 border-t border-white/5 mx-4"></div>
-                      <button
-                        onClick={() => setActiveView('users')}
-                        className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${activeView === 'users'
-                          ? 'text-zinc-100'
-                          : 'text-zinc-500 hover:text-zinc-300'
-                          }`}
-                      >
-                        {activeView === 'users' && (
-                          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)]"></div>
-                        )}
-                        <Users strokeWidth={1.5} size={18} className={`transition-transform duration-300 ${activeView === 'users' ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
-                        <span className="tracking-wide">{t('sidebar.team')}</span>
-                      </button>
+                      <SidebarItem view="users" icon={Users} label={t('sidebar.team')} activeView={activeView} setActiveView={setActiveView} />
                     </>
                   )}
                 </nav>
@@ -593,7 +572,6 @@ const App = () => {
                       </div>
                       <div className="flex flex-col items-start mr-2">
                         <span className="text-xs font-medium text-zinc-200 leading-none mb-0.5">{userName}</span>
-                        <span className="text-[10px] text-zinc-500 font-medium leading-none">{userEmail}</span>
                         <span className="text-[9px] text-zinc-600 font-medium leading-none mt-0.5 uppercase tracking-wider">{userRole}</span>
                       </div>
                       <ChevronDown size={12} className={`text-zinc-500 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
@@ -615,12 +593,22 @@ const App = () => {
                             className="absolute right-0 top-full mt-2 w-56 bg-[#0B0B0B] border border-white/10 rounded-xl shadow-2xl shadow-black/50 backdrop-blur-xl z-50 overflow-hidden"
                           >
                             <div className="p-1">
-                              <button className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-lg transition-colors group">
+                              <button
+                                onClick={() => {
+                                  setActiveView('profile');
+                                  setIsProfileOpen(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-lg transition-colors group">
                                 <User size={14} className="text-zinc-500 group-hover:text-zinc-300" />
                                 {t('profile_dropdown.view_profile')}
                               </button>
-                              <button className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-lg transition-colors group">
-                                <Settings size={14} className="text-zinc-500 group-hover:text-zinc-300" />
+                              <button
+                                onClick={() => {
+                                  setActiveView('settings');
+                                  setIsProfileOpen(false);
+                                }}
+                                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-lg transition-colors group">
+                                <SettingsIcon size={14} className="text-zinc-500 group-hover:text-zinc-300" />
                                 {t('profile_dropdown.account_settings')}
                               </button>
                               {isAdmin && (
@@ -690,6 +678,40 @@ const App = () => {
                       />}
                       {activeView === 'automation' && <Automation flows={automations} isAdmin={isAdmin} />}
                       {activeView === 'users' && isAdmin && <UserManagement />}
+                      {activeView === 'profile' && (
+                        <Profile
+                          user={{
+                            name: userName,
+                            email: userEmail,
+                            avatar: userAvatar,
+                            role: userRole
+                          }}
+                          leads={leads}
+                          activity={activity}
+                        />
+                      )}
+                      {activeView === 'settings' && (
+                        <Settings
+                          user={{
+                            id: (supabase.auth.getUser() as any)?.id || '', // Ideally we get this from state, but for now this works or we can fetch it
+                            name: userName,
+                            email: userEmail,
+                            avatar: userAvatar
+                          }}
+                          wahaStatus={wahaStatus}
+                          onUpdateProfile={async () => {
+                            // Refresh profile data
+                            const { data: { user } } = await supabase.auth.getUser();
+                            if (user) {
+                              const profile = await authActions.getCurrentProfile(user.id);
+                              if (profile) {
+                                setUserName(profile.full_name || user.user_metadata.full_name);
+                                setUserAvatar(profile.avatar_url || user.user_metadata.avatar_url);
+                              }
+                            }
+                          }}
+                        />
+                      )}
                     </motion.div>
                   </AnimatePresence>
                 </div>
@@ -698,7 +720,6 @@ const App = () => {
           </motion.div>
         )}
       </AnimatePresence>
-
     </>
   );
 };

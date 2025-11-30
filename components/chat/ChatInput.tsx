@@ -4,19 +4,43 @@ import { Send, Paperclip, Mic, Smile, X, Image as ImageIcon, FileText, Camera, P
 interface ChatInputProps {
     onSendMessage: (text: string) => void;
     onSendMedia: (file: File, type: 'image' | 'video' | 'file' | 'audio') => void;
+    onTyping?: (isTyping: boolean) => void;
     isSending: boolean;
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onSendMedia, isSending }) => {
+export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onSendMedia, onTyping, isSending }) => {
     const [text, setText] = useState('');
     const [showAttachments, setShowAttachments] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [attachmentType, setAttachmentType] = useState<'image' | 'video' | 'file' | 'audio' | null>(null);
+    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const handleSend = () => {
         if (text.trim()) {
             onSendMessage(text);
             setText('');
+            if (onTyping) onTyping(false);
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        }
+    };
+
+    const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+        setText(e.target.value);
+
+        if (onTyping) {
+            // Clear existing timeout
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            } else {
+                // If no timeout exists, we just started typing
+                onTyping(true);
+            }
+
+            // Set new timeout to stop typing after 2 seconds of inactivity
+            typingTimeoutRef.current = setTimeout(() => {
+                onTyping(false);
+                typingTimeoutRef.current = null;
+            }, 2000);
         }
     };
 
@@ -92,7 +116,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onSendMedia
                 <div className="flex-1 relative group">
                     <textarea
                         value={text}
-                        onChange={(e) => setText(e.target.value)}
+                        onChange={handleTextChange}
                         onKeyDown={handleKeyDown}
                         placeholder="Type a message..."
                         className="w-full bg-transparent border-b border-zinc-800 text-zinc-200 px-0 py-2 focus:outline-none focus:border-bronze-500 transition-colors text-sm placeholder:text-zinc-600 min-h-[40px] max-h-[120px] resize-none custom-scrollbar leading-relaxed"

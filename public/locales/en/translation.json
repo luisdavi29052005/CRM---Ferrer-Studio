@@ -19,7 +19,8 @@
         "account_settings": "Account Settings",
         "sign_out": "Sign Out",
         "team_management": "Team Management",
-        "filter": "Filter"
+        "filter": "Filter",
+        "noItemsFound": "No items found"
     },
     "sidebar": {
         "dashboard": "Dashboard",
@@ -167,20 +168,6 @@
         "filter_sent": "Sent",
         "filter_not_sent": "Not Sent",
         "filter_error": "Error",
-        "table": {
-            "business": "Business",
-            "category": "Category",
-            "phone": "Phone",
-            "location": "Location",
-            "source": "Source",
-            "status": "Status"
-        }
-    },
-    "automation": {
-        "title": "Automation Flows",
-        "subtitle": "Manage n8n workflows and AI triggers.",
-        "new_workflow": "New Workflow",
-        "create_workflow": "Create Workflow",
         "connect_n8n": "Connect n8n webhook or AI trigger",
         "active": "Active",
         "paused": "Paused",
@@ -227,5 +214,38 @@
         "account_settings": "Account Settings",
         "team_management": "Team Management",
         "sign_out": "Sign Out"
+    },
+    "profile": {
+        "total_leads": "Total Leads",
+        "won_deals": "Won Deals",
+        "conversion_rate": "Conversion Rate",
+        "avg_response": "Avg Response Time",
+        "recent_activity": "Recent Activity",
+        "no_activity": "No recent activity"
+    },
+    "settings": {
+        "title": "Settings",
+        "save_changes": "Save Changes",
+        "profile_updated": "Profile updated successfully",
+        "tabs": {
+            "account": "Account",
+            "general": "General",
+            "integrations": "Integrations"
+        },
+        "account": {
+            "profile_header": "Profile Information",
+            "profile_subheader": "Update your photo and personal details.",
+            "avatar_url": "Avatar URL",
+            "full_name": "Full Name",
+            "email": "Email Address"
+        },
+        "general": {
+            "language_header": "Language",
+            "language_subheader": "Select your preferred language."
+        },
+        "integrations": {
+            "header": "Integrations",
+            "subheader": "Manage your connected services."
+        }
     }
 }

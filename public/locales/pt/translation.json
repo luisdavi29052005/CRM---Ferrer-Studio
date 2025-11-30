@@ -19,7 +19,8 @@
         "account_settings": "Configurações",
         "sign_out": "Sair",
         "team_management": "Gerenciar Equipe",
-        "filter": "Filtrar"
+        "filter": "Filtrar",
+        "noItemsFound": "Nenhum item encontrado"
     },
     "sidebar": {
         "dashboard": "Painel",
@@ -167,24 +168,19 @@
         "filter_sent": "Enviado",
         "filter_not_sent": "Não Enviado",
         "filter_error": "Erro",
+        "connect_n8n": "Conectar webhook n8n ou gatilho IA",
+        "active": "Ativo",
+        "paused": "Pausado",
+        "no_workflows": "Nenhum fluxo ativo ainda.",
+        "all_imports_count": "Todas as Importações ({{count}})",
         "table": {
             "business": "Empresa",
             "category": "Categoria",
             "phone": "Telefone",
             "location": "Localização",
-            "source": "Origem",
+            "source": "Fonte",
             "status": "Status"
         }
-    },
-    "automation": {
-        "title": "Fluxos de Automação",
-        "subtitle": "Gerencie fluxos n8n e gatilhos de IA.",
-        "new_workflow": "Novo Fluxo",
-        "create_workflow": "Criar Fluxo",
-        "connect_n8n": "Conectar webhook n8n ou gatilho IA",
-        "active": "Ativo",
-        "paused": "Pausado",
-        "no_workflows": "Nenhum fluxo ativo ainda."
     },
     "team": {
         "title": "Gerenciamento de Equipe",
@@ -227,5 +223,38 @@
         "account_settings": "Configurações",
         "team_management": "Gerenciar Equipe",
         "sign_out": "Sair"
+    },
+    "profile": {
+        "total_leads": "Total de Leads",
+        "won_deals": "Negócios Ganhos",
+        "conversion_rate": "Taxa de Conversão",
+        "avg_response": "Tempo Médio de Resposta",
+        "recent_activity": "Atividade Recente",
+        "no_activity": "Nenhuma atividade recente"
+    },
+    "settings": {
+        "title": "Configurações",
+        "save_changes": "Salvar Alterações",
+        "profile_updated": "Perfil atualizado com sucesso",
+        "tabs": {
+            "account": "Conta",
+            "general": "Geral",
+            "integrations": "Integrações"
+        },
+        "account": {
+            "profile_header": "Informações do Perfil",
+            "profile_subheader": "Atualize sua foto e dados pessoais.",
+            "avatar_url": "URL do Avatar",
+            "full_name": "Nome Completo",
+            "email": "Endereço de Email"
+        },
+        "general": {
+            "language_header": "Idioma",
+            "language_subheader": "Selecione seu idioma preferido."
+        },
+        "integrations": {
+            "header": "Integrações",
+            "subheader": "Gerencie seus serviços conectados."
+        }
     }
 }

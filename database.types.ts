@@ -23,6 +23,7 @@ export type Database = {
                     street: string | null
                     title: string | null
                     url: string | null
+                    user_id: string | null
                 }
                 Insert: {
                     category?: string | null
@@ -37,6 +38,7 @@ export type Database = {
                     street?: string | null
                     title?: string | null
                     url?: string | null
+                    user_id?: string | null
                 }
                 Update: {
                     category?: string | null
@@ -51,6 +53,7 @@ export type Database = {
                     street?: string | null
                     title?: string | null
                     url?: string | null
+                    user_id?: string | null
                 }
                 Relationships: []
             }
@@ -62,6 +65,7 @@ export type Database = {
                     leads_touched: number | null
                     name: string | null
                     status: string | null
+                    user_id: string | null
                 }
                 Insert: {
                     description?: string | null
@@ -70,6 +74,7 @@ export type Database = {
                     leads_touched?: number | null
                     name?: string | null
                     status?: string | null
+                    user_id?: string | null
                 }
                 Update: {
                     description?: string | null
@@ -78,147 +83,244 @@ export type Database = {
                     leads_touched?: number | null
                     name?: string | null
                     status?: string | null
+                    user_id?: string | null
+                }
+                Relationships: []
+            }
+            chats: {
+                Row: {
+                    contact_name: string | null
+                    created_at: string | null
+                    id: number
+                    last_message: string | null
+                    last_message_time: string | null
+                    phone_number: string | null
+                    status: string | null
+                    unread_count: number | null
+                    user_id: string | null
+                }
+                Insert: {
+                    contact_name?: string | null
+                    created_at?: string | null
+                    id?: number
+                    last_message?: string | null
+                    last_message_time?: string | null
+                    phone_number?: string | null
+                    status?: string | null
+                    unread_count?: number | null
+                    user_id?: string | null
+                }
+                Update: {
+                    contact_name?: string | null
+                    created_at?: string | null
+                    id?: number
+                    last_message?: string | null
+                    last_message_time?: string | null
+                    phone_number?: string | null
+                    status?: string | null
+                    unread_count?: number | null
+                    user_id?: string | null
                 }
                 Relationships: []
             }
             leads: {
                 Row: {
-                    budget: string | null
-                    business: string | null
-                    category: string | null
-                    chat_id: string | null
-                    city: string | null
+                    company_name: string
                     created_at: string | null
+                    email: string | null
                     id: number
-                    name: string | null
-                    notes: string | null
+                    last_contact: string | null
+                    name: string
+                    next_action: string | null
+                    next_action_date: string | null
                     phone: string | null
-                    score: number | null
-                    service: string | null
                     source: string | null
-                    stage: string | null
-                    state: string | null
-                    temperature: string | null
-                    updated_at: string | null
+                    status: string | null
+                    tags: string[] | null
+                    user_id: string | null
+                    value: number | null
+                    chat_id: string | null
                 }
                 Insert: {
-                    budget?: string | null
-                    business?: string | null
-                    category?: string | null
-                    chat_id?: string | null
-                    city?: string | null
+                    company_name: string
                     created_at?: string | null
+                    email?: string | null
                     id?: number
-                    name?: string | null
-                    notes?: string | null
+                    last_contact?: string | null
+                    name: string
+                    next_action?: string | null
+                    next_action_date?: string | null
                     phone?: string | null
-                    score?: number | null
-                    service?: string | null
                     source?: string | null
-                    stage?: string | null
-                    state?: string | null
-                    temperature?: string | null
-                    updated_at?: string | null
+                    status?: string | null
+                    tags?: string[] | null
+                    user_id?: string | null
+                    value?: number | null
+                    chat_id?: string | null
                 }
                 Update: {
-                    budget?: string | null
-                    business?: string | null
-                    category?: string | null
-                    chat_id?: string | null
-                    city?: string | null
+                    company_name?: string
                     created_at?: string | null
+                    email?: string | null
                     id?: number
-                    name?: string | null
-                    notes?: string | null
+                    last_contact?: string | null
+                    name?: string
+                    next_action?: string | null
+                    next_action_date?: string | null
                     phone?: string | null
-                    score?: number | null
-                    service?: string | null
                     source?: string | null
-                    stage?: string | null
-                    state?: string | null
-                    temperature?: string | null
-                    updated_at?: string | null
+                    status?: string | null
+                    tags?: string[] | null
+                    user_id?: string | null
+                    value?: number | null
+                    chat_id?: string | null
                 }
                 Relationships: [
                     {
                         foreignKeyName: "leads_chat_id_fkey"
                         columns: ["chat_id"]
                         isOneToOne: false
-                        referencedRelation: "waha"
-                        referencedColumns: ["chatID"]
-                    },
+                        referencedRelation: "whatsapp_waha_chats"
+                        referencedColumns: ["chat_jid"]
+                    }
                 ]
             }
             messages: {
                 Row: {
-                    chat_id: string | null
-                    from_me: boolean | null
+                    chat_id: number | null
+                    content: string | null
+                    created_at: string | null
                     id: number
-                    is_ai_generated: boolean | null
-                    text: string | null
-                    timestamp: number | null
+                    sender: string | null
+                    timestamp: string | null
                 }
                 Insert: {
-                    chat_id?: string | null
-                    from_me?: boolean | null
+                    chat_id?: number | null
+                    content?: string | null
+                    created_at?: string | null
                     id?: number
-                    is_ai_generated?: boolean | null
-                    text?: string | null
-                    timestamp?: number | null
+                    sender?: string | null
+                    timestamp?: string | null
                 }
                 Update: {
-                    chat_id?: string | null
-                    from_me?: boolean | null
+                    chat_id?: number | null
+                    content?: string | null
+                    created_at?: string | null
                     id?: number
-                    is_ai_generated?: boolean | null
-                    text?: string | null
-                    timestamp?: number | null
+                    sender?: string | null
+                    timestamp?: string | null
+                }
+                Relationships: []
+            }
+            whatsapp_waha_chats: {
+                Row: {
+                    chat_jid: string | null
+                    created_at: string | null
+                    id: number
+                    is_group: boolean | null
+                    last_message: string | null
+                    last_message_at: string | null
+                    last_message_from_me: boolean | null
+                    name: string | null
+                    phone: string | null
+                    session: string | null
+                    unread_count: number | null
+                    updated_at: string | null
+                }
+                Insert: {
+                    chat_jid?: string | null
+                    created_at?: string | null
+                    id?: number
+                    is_group?: boolean | null
+                    last_message?: string | null
+                    last_message_at?: string | null
+                    last_message_from_me?: boolean | null
+                    name?: string | null
+                    phone?: string | null
+                    session?: string | null
+                    unread_count?: number | null
+                    updated_at?: string | null
+                }
+                Update: {
+                    chat_jid?: string | null
+                    created_at?: string | null
+                    id?: number
+                    is_group?: boolean | null
+                    last_message?: string | null
+                    last_message_at?: string | null
+                    last_message_from_me?: boolean | null
+                    name?: string | null
+                    phone?: string | null
+                    session?: string | null
+                    unread_count?: number | null
+                    updated_at?: string | null
+                }
+                Relationships: []
+            }
+            whatsapp_waha_messages: {
+                Row: {
+                    ack: number | null
+                    body: string | null
+                    chat_id: number | null
+                    created_at: string | null
+                    from_jid: string | null
+                    from_me: boolean | null
+                    has_media: boolean | null
+                    id: number
+                    media_caption: string | null
+                    media_mime_type: string | null
+                    media_url: string | null
+                    message_id: string | null
+                    message_timestamp: string | null
+                    raw: Json | null
+                    session: string | null
+                    type: string | null
+                }
+                Insert: {
+                    ack?: number | null
+                    body?: string | null
+                    chat_id?: number | null
+                    created_at?: string | null
+                    from_jid?: string | null
+                    from_me?: boolean | null
+                    has_media?: boolean | null
+                    id?: number
+                    media_caption?: string | null
+                    media_mime_type?: string | null
+                    media_url?: string | null
+                    message_id?: string | null
+                    message_timestamp?: string | null
+                    raw?: Json | null
+                    session?: string | null
+                    type?: string | null
+                }
+                Update: {
+                    ack?: number | null
+                    body?: string | null
+                    chat_id?: number | null
+                    created_at?: string | null
+                    from_jid?: string | null
+                    from_me?: boolean | null
+                    has_media?: boolean | null
+                    id?: number
+                    media_caption?: string | null
+                    media_mime_type?: string | null
+                    media_url?: string | null
+                    message_id?: string | null
+                    message_timestamp?: string | null
+                    raw?: Json | null
+                    session?: string | null
+                    type?: string | null
                 }
                 Relationships: [
                     {
-                        foreignKeyName: "messages_chat_id_fkey"
+                        foreignKeyName: "whatsapp_waha_messages_chat_id_fkey"
                         columns: ["chat_id"]
                         isOneToOne: false
-                        referencedRelation: "waha"
-                        referencedColumns: ["chatID"]
-                    },
+                        referencedRelation: "whatsapp_waha_chats"
+                        referencedColumns: ["id"]
+                    }
                 ]
-            }
-            waha: {
-                Row: {
-                    chatID: string | null
-                    id: number
-                    last_from_me: boolean | null
-                    last_text: string | null
-                    last_timestamp: number | null
-                    push_name: string | null
-                    session: string | null
-                    status: string | null
-                    unreadCount: number | null
-                }
-                Insert: {
-                    chatID?: string | null
-                    id?: number
-                    last_from_me?: boolean | null
-                    last_text?: string | null
-                    last_timestamp?: number | null
-                    push_name?: string | null
-                    session?: string | null
-                    status?: string | null
-                    unreadCount?: number | null
-                }
-                Update: {
-                    chatID?: string | null
-                    id?: number
-                    last_from_me?: boolean | null
-                    last_text?: string | null
-                    last_timestamp?: number | null
-                    push_name?: string | null
-                    session?: string | null
-                    status?: string | null
-                    unreadCount?: number | null
-                }
-                Relationships: []
             }
         }
         Views: {
@@ -235,3 +337,98 @@ export type Database = {
         }
     }
 }
+
+export type Tables<
+    PublicTableNameOrOptions extends
+    | keyof (Database["public"]["Tables"] & Database["public"]["Views"])
+    | { schema: keyof Database },
+    TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
+    ? keyof (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
+        Database[PublicTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = PublicTableNameOrOptions extends { schema: keyof Database }
+    ? (Database[PublicTableNameOrOptions["schema"]]["Tables"] &
+        Database[PublicTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+            Row: infer R
+        }
+    ? R
+    : never
+    : PublicTableNameOrOptions extends keyof (Database["public"]["Tables"] &
+        Database["public"]["Views"])
+    ? (Database["public"]["Tables"] &
+        Database["public"]["Views"])[PublicTableNameOrOptions] extends {
+            Row: infer R
+        }
+    ? R
+    : never
+    : never
+
+export type TablesInsert<
+    PublicTableNameOrOptions extends
+    | keyof Database["public"]["Tables"]
+    | { schema: keyof Database },
+    TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
+    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = PublicTableNameOrOptions extends { schema: keyof Database }
+    ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+        Insert: infer I
+    }
+    ? I
+    : never
+    : PublicTableNameOrOptions extends keyof Database["public"]["Tables"]
+    ? Database["public"]["Tables"][PublicTableNameOrOptions] extends {
+        Insert: infer I
+    }
+    ? I
+    : never
+    : never
+
+export type TablesUpdate<
+    PublicTableNameOrOptions extends
+    | keyof Database["public"]["Tables"]
+    | { schema: keyof Database },
+    TableName extends PublicTableNameOrOptions extends { schema: keyof Database }
+    ? keyof Database[PublicTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = PublicTableNameOrOptions extends { schema: keyof Database }
+    ? Database[PublicTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+        Update: infer U
+    }
+    ? U
+    : never
+    : PublicTableNameOrOptions extends keyof Database["public"]["Tables"]
+    ? Database["public"]["Tables"][PublicTableNameOrOptions] extends {
+        Update: infer U
+    }
+    ? U
+    : never
+    : never
+
+export type Enums<
+    PublicEnumNameOrOptions extends
+    | keyof Database["public"]["Enums"]
+    | { schema: keyof Database },
+    EnumName extends PublicEnumNameOrOptions extends { schema: keyof Database }
+    ? keyof Database[PublicEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = PublicEnumNameOrOptions extends { schema: keyof Database }
+    ? Database[PublicEnumNameOrOptions["schema"]]["Enums"][EnumName]
+    : PublicEnumNameOrOptions extends keyof Database["public"]["Enums"]
+    ? Database["public"]["Enums"][PublicEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+    PublicCompositeTypeNameOrOptions extends
+    | keyof Database["public"]["CompositeTypes"]
+    | { schema: keyof Database },
+    CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+        schema: keyof Database
+    }
+    ? keyof Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends { schema: keyof Database }
+    ? Database[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+    : PublicCompositeTypeNameOrOptions extends keyof Database["public"]["CompositeTypes"]
+    ? Database["public"]["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never

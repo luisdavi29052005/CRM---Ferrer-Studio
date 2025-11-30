@@ -109,9 +109,57 @@ const fetchExchangeRates = async () => {
     }
 };
 
+// Token management
+let accessToken: string | null = null;
+let tokenExpiry: number | null = null;
+
+const getPayPalToken = async (): Promise<string> => {
+    if (accessToken && tokenExpiry && Date.now() < tokenExpiry) {
+        return accessToken;
+    }
+
+    const clientId = process.env.PAYPAL_CLIENT_ID;
+    const clientSecret = process.env.PAYPAL_SECRET;
+    const environment = process.env.PAYPAL_ENVIRONMENT || 'SANDBOX';
+    const baseUrl = environment === 'PRODUCTION'
+        ? 'https://api-m.paypal.com'
+        : 'https://api-m.sandbox.paypal.com';
+
+    if (!clientId || !clientSecret) {
+        throw new Error('PayPal Client ID or Secret not found in environment variables');
+    }
+
+    const auth = btoa(`${clientId}:${clientSecret}`);
+
+    try {
+        const response = await fetch(`${baseUrl}/v1/oauth2/token`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: 'grant_type=client_credentials'
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to generate PayPal token: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        accessToken = data.access_token;
+        // Expire 60 seconds before actual expiry to be safe
+        tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000;
+
+        return accessToken as string;
+    } catch (error) {
+        console.error('Error generating PayPal token:', error);
+        throw error;
+    }
+};
+
 export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1y' = '30d'): Promise<PayPalDashboardData> => {
     try {
-        const token = process.env.PAYPAL_ACCESS_TOKEN;
+        const token = await getPayPalToken();
         const environment = process.env.PAYPAL_ENVIRONMENT || 'SANDBOX';
         const baseUrl = environment === 'PRODUCTION'
             ? 'https://api-m.paypal.com'
@@ -334,14 +382,14 @@ export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1
  */
 export const getPayPalOrderDetails = async (orderId: string): Promise<any> => {
     try {
-        const token = process.env.PAYPAL_ACCESS_TOKEN;
+        const token = await getPayPalToken();
         const environment = process.env.PAYPAL_ENVIRONMENT || 'SANDBOX';
         const baseUrl = environment === 'PRODUCTION'
             ? 'https://api-m.paypal.com'
             : 'https://api-m.sandbox.paypal.com';
 
         if (!token) {
-            throw new Error('PayPal Access Token not found in environment variables');
+            throw new Error('Failed to retrieve PayPal Access Token');
         }
 
         // 1. Try to fetch as a Capture first (to get detailed financials)

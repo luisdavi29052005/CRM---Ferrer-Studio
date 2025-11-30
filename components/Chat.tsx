@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Lead, Message, WahaChat, ApifyLead } from '../types';
-import { fetchMessages, sendMessage, checkWahaStatus, fetchWahaProfile, startWahaSession, getWahaScreenshot } from '../services/supabaseService';
+import { fetchMessages, sendMessage, checkWahaStatus, fetchWahaProfile, startWahaSession, getWahaScreenshot, fetchContactProfilePic, checkPresence, subscribePresence, startTyping, stopTyping } from '../services/supabaseService';
+
+
+import { supabase } from '../supabaseClient';
 import { ChatSidebar } from './chat/ChatSidebar';
 import { ChatWindow } from './chat/ChatWindow';
 import { ChatInput } from './chat/ChatInput';
@@ -28,6 +31,8 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
   const [wahaProfile, setWahaProfile] = useState<{ id: string, name: string, picture: string } | null>(null);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [profilePics, setProfilePics] = useState<Record<string, string>>({});
+  const [contactPresence, setContactPresence] = useState<'online' | 'offline' | 'unknown'>('unknown');
 
   // Check WAHA status and profile periodically
   useEffect(() => {
@@ -54,6 +59,36 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
       return () => clearInterval(interval);
     }
   }, [wahaStatus, wahaProfile]);
+
+  // Fetch profile pictures for all chats
+  useEffect(() => {
+    const fetchImages = async () => {
+      const newPics: Record<string, string> = {};
+      const uniqueChatIds = Array.from(new Set(chats.map(c => c.chatID)));
+
+      // Process in batches
+      const batchSize = 5;
+      for (let i = 0; i < uniqueChatIds.length; i += batchSize) {
+        const batch = uniqueChatIds.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (chatId) => {
+          if (!profilePics[chatId]) {
+            const url = await fetchContactProfilePic(chatId);
+            if (url) {
+              newPics[chatId] = url;
+            }
+          }
+        }));
+      }
+
+      if (Object.keys(newPics).length > 0) {
+        setProfilePics(prev => ({ ...prev, ...newPics }));
+      }
+    };
+
+    if (chats.length > 0) {
+      fetchImages();
+    }
+  }, [chats]);
 
   const fetchQRCode = async () => {
     const url = await getWahaScreenshot();
@@ -105,7 +140,6 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
     } else if (apifyLeads && apifyLeads.length > 0) {
       // Check Apify Leads
       const apifyLead = apifyLeads.find(l =>
-        l.chat_id === selectedChatId ||
         l.phone === selectedChatId ||
         l.id === selectedChatId
       );
@@ -113,162 +147,163 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
       if (apifyLead) {
         activeChat = {
           id: 'temp-apify',
-          chatID: apifyLead.chat_id || apifyLead.phone || apifyLead.id, // Best effort chat ID
-          push_name: apifyLead.title || apifyLead.name || apifyLead.phone,
+          chatID: apifyLead.phone || apifyLead.id, // Best effort chat ID
+          push_name: apifyLead.title || apifyLead.phone,
           last_text: '',
           last_from_me: true,
           last_timestamp: Date.now(),
           status: 'sent',
           unreadCount: 0,
-          // We don't have a full 'Lead' object yet, but we can construct a partial one or handle it
-          // For now, let's cast it or create a temp lead object to satisfy the type if needed, 
-          // or just leave lead undefined if the UI handles it. 
-          // ChatWindow expects activeChat.lead for some things, but might be optional.
-          // Let's create a temp lead from Apify data
           lead: {
             id: apifyLead.id,
-            created_at: new Date().toISOString(),
-            user_id: 'temp',
-            name: apifyLead.title || apifyLead.name || 'Unknown',
+            chat_id: apifyLead.phone || '',
+            name: apifyLead.title || 'Unknown',
+            business: apifyLead.title || '',
             phone: apifyLead.phone,
-            business: apifyLead.category,
             city: apifyLead.city || '',
+            state: apifyLead.state || '',
+            category: apifyLead.category || '',
             stage: 'New',
             temperature: 'Cold',
             score: 0,
             budget: 0,
             notes: '',
-            last_interaction: new Date().toISOString(),
             source: 'apify',
-            chat_id: apifyLead.chat_id || apifyLead.phone,
+            last_interaction: new Date().toISOString(),
           } as Lead
         };
       }
     }
   }
-
   useEffect(() => {
     if (selectedChatId) {
       const loadMessages = async () => {
         const msgs = await fetchMessages(selectedChatId);
         setMessages(msgs);
+
+        // Presence Logic
+        setContactPresence('unknown'); // Reset
+        await subscribePresence(selectedChatId);
+
+        const check = async () => {
+          const presence = await checkPresence(selectedChatId);
+          setContactPresence(presence);
+        };
+        check();
+
+        // Poll every 10 seconds
+        const interval = setInterval(check, 10000);
+        return () => clearInterval(interval);
       };
-      loadMessages();
-      // Optional: Set up realtime subscription here
+      const cleanupPromise = loadMessages();
+
+      // Realtime Subscription
+      const chatInternalId = chats.find(c => c.chatID === selectedChatId)?.id;
+
+      if (chatInternalId) {
+        const channel = supabase
+          .channel(`chat:${selectedChatId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'whatsapp_waha_messages',
+              filter: `chat_id=eq.${chatInternalId}`
+            },
+            (payload) => {
+              console.log('New message received:', payload);
+              const newMsg = payload.new as any;
+              setMessages(prev => {
+                if (prev.some(m => m.id === newMsg.id.toString())) {
+                  return prev;
+                }
+                return [...prev, {
+                  id: newMsg.id.toString(),
+                  text: newMsg.body || '',
+                  fromMe: newMsg.from_me || false,
+                  timestamp: newMsg.message_timestamp ? new Date(newMsg.message_timestamp).getTime() : Date.now(),
+                  isAiGenerated: false,
+                  ack: newMsg.ack || 0,
+                  mediaUrl: newMsg.media_url || undefined,
+                  mediaType: newMsg.type as any || undefined,
+                  caption: newMsg.media_caption || undefined
+                }];
+              });
+            }
+          )
+          .subscribe((status) => {
+            console.log(`Subscription status for chat ${selectedChatId}:`, status);
+          });
+
+        return () => {
+          supabase.removeChannel(channel);
+          cleanupPromise.then(cleanup => cleanup && cleanup());
+        };
+      }
+
+      return () => {
+        cleanupPromise.then(cleanup => cleanup && cleanup());
+      };
     }
-  }, [selectedChatId]);
+  }, [selectedChatId, chats]);
 
   const handleSend = async (text: string) => {
     if (!selectedChatId || isSending) return;
 
+    // Optimistic Update
+    const tempId = 'temp-' + Date.now();
+    const tempMessage: Message = {
+      id: tempId,
+      chat_id: selectedChatId,
+      body: text,
+      fromMe: true,
+      timestamp: Date.now(),
+      isAiGenerated: false,
+      ack: 0, // Pending (Clock icon)
+    };
+
+    setMessages(prev => [...prev, tempMessage]);
     setIsSending(true);
-    const result = await sendMessage(selectedChatId, text);
-    setIsSending(false);
 
-    if (result.success && result.message) {
-      setMessages(prev => [...prev, result.message!]);
+    try {
+      const result = await sendMessage(selectedChatId, text);
 
-      // --- AI Integration ---
-      // Only trigger AI if the message is from the user (simulated here for demo purposes, 
-      // normally we'd listen to incoming messages via webhook/realtime)
-      // BUT for this demo, we'll assume we want the AI to reply to OUR message if we are testing,
-      // OR more realistically, we should trigger this when an INCOMING message arrives.
-      // Since we don't have real incoming messages easily in this dev env without a phone,
-      // I will trigger the AI response logic when WE send a message just to demonstrate the logic flow,
-      // OR I can add a "Simulate Incoming" button. 
-      // Better yet: I'll add a hidden trigger or just let the AI reply to itself for testing? 
-      // No, that's infinite loop risk.
-
-      // Let's assume we want to test the AI logic. I'll add a temporary "Simulate Reply" effect
-      // that pretends the user replied, then the AI analyzes THAT.
-      // For now, I will just implement the AI analysis part that would run on incoming messages.
-
-      // However, the user request implies the AI acts as the agent.
-      // So if *I* (the human using the dashboard) send a message, the AI shouldn't reply to me.
-      // The AI should reply when the *Lead* sends a message.
-      // Since I cannot easily receive real WhatsApp messages here, I will add a helper to simulate an incoming message
-      // for testing purposes.
-    } else {
-      console.error("Failed to send message:", result.error);
-      alert(`Failed to send message: ${result.error || 'Unknown error'}`);
+      if (result.success && result.message) {
+        const realMessage = result.message;
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === realMessage.id);
+          if (exists) {
+            return prev.filter(m => m.id !== tempId);
+          }
+          return prev.map(m => m.id === tempId ? realMessage : m);
+        });
+      } else {
+        console.error("Failed to send message:", result.error);
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        alert(`Failed to send message: ${result.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error("Error sending message:", error);
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+    } finally {
+      setIsSending(false);
     }
   };
 
-  // --- AI Logic for Incoming Messages (Simulated) ---
-  // In a real app, this would be in a Supabase Edge Function triggered by a webhook.
-  // Here, we'll simulate it by listening to the messages array changes.
-  useEffect(() => {
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage && !lastMessage.fromMe && !lastMessage.isAiGenerated && activeChat) {
-      const processAI = async () => {
-        const { aiService } = await import('../services/aiService');
-        const { updateLeadStatus, promoteApifyLeadToCRM, sendMessage } = await import('../services/supabaseService');
-
-        // 1. Analyze
-        const analysis = await aiService.analyzeConversation(messages, lastMessage.text);
-        console.log("AI Analysis:", analysis);
-
-        // 2. Handle Intent
-        if (analysis.intent === 'handoff') {
-          // Notify user (toast or visual indicator)
-          console.log("User requested handoff");
-          return; // Stop AI
-        }
-
-        if (analysis.intent === 'won' && activeChat.lead) {
-          await updateLeadStatus(activeChat.lead.id, 'Won', analysis.value);
-          console.log("Lead marked as Won");
-        }
-
-        if (analysis.intent === 'lost' && activeChat.lead) {
-          await updateLeadStatus(activeChat.lead.id, 'Lost');
-          console.log("Lead marked as Lost");
-        }
-
-        // 3. Qualify Lead (Apify -> CRM)
-        if (!activeChat.lead && aiService.shouldQualifyLead(messages)) {
-          // It's an Apify chat without a CRM lead yet
-          // Promote it
-          // We need the apify ID, which might be the chatID or linked. 
-          // For now, we'll assume we can create a lead from the chat info.
-          // This part is tricky without the exact Apify ID link, but we can try to find it or just create a new lead.
-          // Let's assume we create a new lead.
-          await promoteApifyLeadToCRM(activeChat.id, { // activeChat.id here is the waha table id, might not match apify.
-            chat_id: activeChat.chatID,
-            name: activeChat.push_name,
-            phone: activeChat.chatID.replace('@c.us', '')
-          });
-          console.log("Lead Promoted to CRM");
-        }
-
-        // 4. Generate Response
-        const response = await aiService.generateResponse(analysis, activeChat.push_name);
-
-        // 5. Send Response (Simulated delay)
-        setTimeout(async () => {
-          await sendMessage(activeChat!.chatID, response.text);
-          // We need to refresh messages to see the new one, but sendMessage updates DB.
-          // The realtime sub or manual fetch would update UI.
-          // For now, let's just manually update state to show it immediately
-          setMessages(prev => [...prev, {
-            id: 'temp-ai-' + Date.now(),
-            text: response.text,
-            fromMe: true,
-            timestamp: Date.now(),
-            isAiGenerated: true
-          }]);
-        }, 2000);
-      };
-
-      processAI();
+  const handleTyping = async (isTyping: boolean) => {
+    if (!selectedChatId) return;
+    if (isTyping) {
+      await startTyping(selectedChatId);
+    } else {
+      await stopTyping(selectedChatId);
     }
-  }, [messages, activeChat]);
+  };
 
   return (
     <div className="flex h-full bg-[#0F0F0F] relative overflow-hidden">
 
       {/* Disconnected Overlay - Gradient with Warning */}
-      {/* Disconnected / QR Code Overlay */}
       {wahaStatus !== 'WORKING' && (
         <div className="absolute inset-0 z-50 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-zinc-900 via-[#050505] to-black flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-500">
           <div className="flex flex-col items-center max-w-md w-full">
@@ -343,6 +378,7 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
           onSelectChat={setSelectedChatId}
           wahaProfile={wahaProfile}
           apifyLeads={apifyLeads}
+          profilePics={profilePics}
         />
       </div>
 
@@ -356,6 +392,8 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
                 messages={messages}
                 onToggleContactInfo={() => setShowContactInfo(!showContactInfo)}
                 onBack={() => setSelectedChatId(null)}
+                profilePic={profilePics[activeChat.chatID]}
+                presence={contactPresence}
               />
 
               {/* Contact Info Overlay - Responsive */}
@@ -364,6 +402,7 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
                   <ContactInfo
                     lead={activeChat.lead}
                     onClose={() => setShowContactInfo(false)}
+                    profilePic={profilePics[activeChat.chatID]}
                   />
                 </div>
               )}
@@ -372,6 +411,7 @@ export const Chat: React.FC<ChatProps> = ({ chats, leads, apifyLeads = [], initi
             <ChatInput
               onSendMessage={handleSend}
               onSendMedia={() => { }} // Placeholder for now
+              onTyping={handleTyping}
               isSending={isSending}
             />
           </>

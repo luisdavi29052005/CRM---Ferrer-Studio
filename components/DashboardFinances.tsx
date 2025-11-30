@@ -89,7 +89,7 @@ export const DashboardFinances: React.FC<DashboardFinancesProps> = ({ leads }) =
                         <Activity size={14} strokeWidth={1.5} />
                         {t('dashboard.revenue_trend')}
                     </h3>
-                    <div className="flex-1 w-full min-h-0 -ml-4">
+                    <div className="flex-1 w-full min-h-0 -ml-4 h-full">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={revenueData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
                                 <defs>
@@ -238,7 +238,7 @@ export const DashboardFinances: React.FC<DashboardFinancesProps> = ({ leads }) =
                                     <Activity size={14} strokeWidth={1.5} />
                                     {t('dashboard.earnings_trend')}
                                 </h3>
-                                <div className="flex-1 w-full min-h-0 -ml-4">
+                                <div className="flex-1 w-full min-h-0 -ml-4 h-full">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={payPalData.chartData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
                                             <defs>

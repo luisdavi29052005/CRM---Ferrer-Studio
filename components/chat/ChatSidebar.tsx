@@ -11,9 +11,10 @@ interface ChatSidebarProps {
     selectedChatId: string | null;
     onSelectChat: (chatId: string) => void;
     wahaProfile: { id: string, name: string, picture: string } | null;
+    profilePics: Record<string, string>;
 }
 
-export const ChatSidebar: React.FC<ChatSidebarProps> = ({ chats, leads, apifyLeads = [], selectedChatId, onSelectChat, wahaProfile }) => {
+export const ChatSidebar: React.FC<ChatSidebarProps> = ({ chats, leads, apifyLeads = [], selectedChatId, onSelectChat, wahaProfile, profilePics }) => {
     const { t } = useTranslation();
     const [searchTerm, setSearchTerm] = useState('');
     const [currentRecommendationIndex, setCurrentRecommendationIndex] = useState(0);
@@ -216,9 +217,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ chats, leads, apifyLea
                                 className={`group flex items-center gap-4 p-4 border-b border-white/5 cursor-pointer transition-colors hover:bg-white/[0.02] ${selectedChatId === chat.chatID ? 'bg-white/[0.04]' : ''
                                     }`}
                             >
-                                <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-xs font-bold text-zinc-500 border border-white/5 group-hover:border-bronze-500/30 group-hover:text-bronze-500 transition-colors shrink-0">
-                                    {chat.lead?.avatar_url ? (
-                                        <img src={chat.lead.avatar_url} alt={chat.push_name} className="w-full h-full object-cover rounded-full" />
+                                <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-xs font-bold text-zinc-500 border border-white/5 group-hover:border-bronze-500/30 group-hover:text-bronze-500 transition-colors shrink-0 overflow-hidden">
+                                    {profilePics[chat.chatID] || chat.lead?.avatar_url ? (
+                                        <img src={profilePics[chat.chatID] || chat.lead?.avatar_url} alt={chat.push_name} className="w-full h-full object-cover" />
                                     ) : (
                                         <span>{chat.push_name?.charAt(0)}</span>
                                     )}
@@ -227,7 +228,7 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({ chats, leads, apifyLea
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-baseline mb-1">
                                         <h3 className={`text-sm font-semibold truncate transition-colors ${selectedChatId === chat.chatID ? 'text-white' : 'text-zinc-200 group-hover:text-white'}`}>
-                                            {chat.push_name || chat.chatID}
+                                            {chat.lead?.name || chat.push_name || chat.chatID}
                                         </h3>
                                         <span className="text-[10px] text-zinc-500 font-medium">
                                             {formatTime(chat.last_timestamp)}

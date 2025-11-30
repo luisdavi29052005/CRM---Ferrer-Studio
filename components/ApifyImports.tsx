@@ -3,9 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { Download, FileDown, RefreshCw, Upload, CheckCircle, Clock, AlertCircle, MessageSquare, Search, Filter, Trash2, X, Calendar } from 'lucide-react';
 import Papa from 'papaparse';
 import { supabase } from '../supabaseClient';
-import { Lead } from '../types';
+import { Lead, Stage, Source } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HighlightText } from './HighlightText';
+import { fetchContactProfilePic, checkNumberExists, deleteApifyLeads } from '../services/supabaseService';
+import { AlertModal } from './AlertModal';
 
 export type ApifyLead = {
   id: number;
@@ -29,10 +31,14 @@ type Props = {
 export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
+  const [profilePics, setProfilePics] = useState<Record<string, string>>({});
+  const [alertModal, setAlertModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' | 'info' }>({ isOpen: false, title: '', message: '', type: 'info' });
 
   // Advanced Filters State
   const [showFilters, setShowFilters] = useState(false);
@@ -44,6 +50,34 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
     dateStart: '',
     dateEnd: ''
   });
+
+  // Fetch profile pictures for items with phone numbers
+  useEffect(() => {
+    const fetchPics = async () => {
+      const pics: { [key: string]: string } = {};
+      // Process in batches to avoid overwhelming the server
+      const batchSize = 5;
+      const itemsWithPhone = items.filter(item => item.phone);
+
+      for (let i = 0; i < itemsWithPhone.length; i += batchSize) {
+        const batch = itemsWithPhone.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (item) => {
+          if (item.phone && !profilePics[item.phone]) {
+            const url = await fetchContactProfilePic(item.phone);
+            if (url) {
+              pics[item.phone] = url;
+            }
+          }
+        }));
+        // Update state incrementally
+        setProfilePics(prev => ({ ...prev, ...pics }));
+      }
+    };
+
+    if (items.length > 0) {
+      fetchPics();
+    }
+  }, [items]);
 
   const filteredItems = items.filter(item => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -112,6 +146,82 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
     }
   };
 
+  const handleDelete = async () => {
+    if (selectedItems.size === 0) return;
+
+    if (window.confirm(`Are you sure you want to delete ${selectedItems.size} items?`)) {
+      setDeleting(true);
+      try {
+        await deleteApifyLeads(Array.from(selectedItems).map(id => id.toString()));
+        setSelectedItems(new Set());
+        if (onImport) await onImport(); // Refresh list
+      } catch (error) {
+        console.error('Error deleting items:', error);
+        alert('Failed to delete items');
+      } finally {
+        setDeleting(false);
+      }
+    }
+  };
+
+  const handleImport = async () => {
+    if (selectedItems.size === 0) return;
+
+    setImporting(true);
+    try {
+      const itemsToImport = items.filter(item => selectedItems.has(item.id));
+      let importedCount = 0;
+      const totalItems = itemsToImport.length;
+      const CHUNK_SIZE = 10;
+
+      for (let i = 0; i < totalItems; i += CHUNK_SIZE) {
+        const chunk = itemsToImport.slice(i, i + CHUNK_SIZE);
+
+        await Promise.all(chunk.map(async (item) => {
+          const { error } = await supabase
+            .from('leads')
+            .insert([
+              {
+                name: item.title,
+                company_name: item.title,
+                phone: item.phone,
+                source: 'apify' as Source,
+                status: 'New' as Stage,
+                value: 0,
+                user_id: (await supabase.auth.getUser()).data.user?.id
+              }
+            ]);
+
+          if (!error) {
+            // Update status in apify table
+            await supabase
+              .from('apify')
+              .update({ status: 'sent' })
+              .eq('id', item.id);
+
+            importedCount++;
+          } else {
+            console.error('Error importing lead:', error);
+          }
+        }));
+
+        // Update progress percentage (if we want to show it, though we don't have a specific progress bar for this action yet, maybe reuse importProgress?)
+        setImportProgress(Math.round(((i + chunk.length) / totalItems) * 100));
+      }
+
+      // Final refresh
+      if (onImport) await onImport();
+      setSelectedItems(new Set());
+      setAlertModal({ isOpen: true, title: 'Success', message: `Import completed: ${importedCount} leads added.`, type: 'success' });
+    } catch (error) {
+      console.error('Error importing items:', error);
+      setAlertModal({ isOpen: true, title: 'Error', message: 'Error importing items', type: 'error' });
+    } finally {
+      setImporting(false);
+      setImportProgress(0);
+    }
+  };
+
   const handleExportCSV = () => {
     const csvRows = [];
     const headers = ['title', 'street', 'city', 'state', 'country', 'url', 'category', 'phone'];
@@ -155,7 +265,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
 
     setImporting(true);
@@ -164,7 +274,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      worker: true, // Offload to worker to prevent freezing
+      worker: false, // Disable worker to allow async/await in complete callback easily without complex messaging
       complete: async (results) => {
         const rows = results.data as any[];
 
@@ -190,40 +300,55 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
           return lead;
         });
 
-        // Filter valid leads
-        const leadsToInsert = allLeads.filter(lead => lead.phone && lead.phone.toString().trim().length > 0);
-        const skippedCount = allLeads.length - leadsToInsert.length;
+        // Filter valid leads (must have phone)
+        const leadsWithPhone = allLeads.filter(lead => lead.phone && lead.phone.toString().trim().length > 0);
+        const skippedNoPhone = allLeads.length - leadsWithPhone.length;
 
-        if (leadsToInsert.length === 0) {
-          alert(`No valid leads found. (${skippedCount} skipped due to missing phone)`);
+        if (leadsWithPhone.length === 0) {
+          setAlertModal({ isOpen: true, title: 'Import Failed', message: `No valid leads found. (${skippedNoPhone} skipped due to missing phone)`, type: 'error' });
           setImporting(false);
           if (fileInputRef.current) fileInputRef.current.value = '';
           return;
         }
 
-        // Chunked Insertion
-        const CHUNK_SIZE = 50;
+        // Verify existence sequentially and insert IMMEDIATELY
         let insertedCount = 0;
+        let skippedInvalid = 0;
         let errorCount = 0;
 
-        for (let i = 0; i < leadsToInsert.length; i += CHUNK_SIZE) {
-          const chunk = leadsToInsert.slice(i, i + CHUNK_SIZE);
-          const { error } = await supabase.from('apify').insert(chunk);
-
-          if (error) {
-            console.error('Error importing chunk:', error);
-            errorCount += chunk.length;
-          } else {
-            insertedCount += chunk.length;
-          }
+        // We process all leads with phone
+        for (let i = 0; i < leadsWithPhone.length; i++) {
+          const lead = leadsWithPhone[i];
 
           // Update progress
-          setImportProgress(Math.round(((i + chunk.length) / leadsToInsert.length) * 100));
+          setImportProgress(Math.round(((i + 1) / leadsWithPhone.length) * 100));
+
+          // Check existence
+          const exists = await checkNumberExists(lead.phone);
+
+          if (exists) {
+            // Insert immediately
+            const { error } = await supabase.from('apify').insert([lead]);
+
+            if (error) {
+              console.error('Error importing lead:', error);
+              errorCount++;
+            } else {
+              insertedCount++;
+              // Trigger refresh every item to show real-time progress as requested
+              // This might be heavy but it's what the user wants ("já vai ir adicionando na lista")
+              if (onImport) await onImport();
+            }
+          } else {
+            console.log(`Skipping invalid WhatsApp number: ${lead.phone}`);
+            skippedInvalid++;
+          }
         }
 
-        alert(`Import finished!\nSuccess: ${insertedCount}\nErrors: ${errorCount}\nSkipped: ${skippedCount}`);
+        setAlertModal({ isOpen: true, title: 'Import Finished', message: `Success: ${insertedCount}\nInvalid/Skipped: ${skippedInvalid}\nNo Phone: ${skippedNoPhone}\nErrors: ${errorCount}`, type: 'success' });
 
-        if (insertedCount > 0 && onImport) onImport();
+        // Final refresh just in case
+        if (onImport) await onImport();
 
         setImporting(false);
         setImportProgress(0);
@@ -231,7 +356,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
       },
       error: (error) => {
         console.error('CSV Parse Error:', error);
-        alert(t('imports.error_parsing_csv'));
+        setAlertModal({ isOpen: true, title: 'Error', message: t('imports.error_parsing_csv'), type: 'error' });
         setImporting(false);
       }
     });
@@ -255,20 +380,19 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
 
       if (errorNull || errorEmpty) {
         console.error('Error cleaning invalid leads:', errorNull || errorEmpty);
-        alert(t('imports.error_cleaning_leads'));
+        setAlertModal({ isOpen: true, title: 'Error', message: t('imports.error_cleaning_leads'), type: 'error' });
       } else {
-        alert(t('imports.invalid_leads_cleaned_success'));
-        if (onImport) onImport();
+        setAlertModal({ isOpen: true, title: 'Success', message: t('imports.invalid_leads_cleaned_success'), type: 'success' });
+        if (onImport) await onImport();
       }
     } catch (error) {
       console.error('Error:', error);
-      alert(t('imports.an_error_occurred'));
+      setAlertModal({ isOpen: true, title: 'Error', message: t('imports.an_error_occurred'), type: 'error' });
     }
   };
 
   return (
     <div className="p-8 h-full flex flex-col overflow-hidden relative">
-      {/* Minimalist Header */}
       <div className="flex items-end justify-between mb-8 pb-6 border-b border-white/5">
         <div>
           <h2 className="text-3xl font-bold text-zinc-100 tracking-tight">{t('imports.title')}</h2>
@@ -333,7 +457,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                             dateEnd: ''
                           });
                         }}
-                        className="text-[10px] text-zinc-500 hover:text-zinc-300 uppercase tracking-wider font-medium"
+                        className="text-[10px] text-bronze-500 hover:text-bronze-400 font-medium uppercase tracking-wide"
                       >
                         Clear All
                       </button>
@@ -346,7 +470,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                         <select
                           value={filters.status}
                           onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
-                          className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors"
+                          className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors appearance-none"
                         >
                           <option value="all">All Statuses</option>
                           <option value="sent">Sent</option>
@@ -355,28 +479,28 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                         </select>
                       </div>
 
-                      {/* City & State */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">City</label>
-                          <input
-                            type="text"
-                            value={filters.city}
-                            onChange={(e) => setFilters({ ...filters, city: e.target.value })}
-                            placeholder="e.g. New York"
-                            className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">State</label>
-                          <input
-                            type="text"
-                            value={filters.state}
-                            onChange={(e) => setFilters({ ...filters, state: e.target.value })}
-                            placeholder="e.g. NY"
-                            className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
-                          />
-                        </div>
+                      {/* City */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">City</label>
+                        <input
+                          type="text"
+                          value={filters.city}
+                          onChange={(e) => setFilters({ ...filters, city: e.target.value })}
+                          placeholder="e.g. New York"
+                          className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
+                        />
+                      </div>
+
+                      {/* State */}
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">State</label>
+                        <input
+                          type="text"
+                          value={filters.state}
+                          onChange={(e) => setFilters({ ...filters, state: e.target.value })}
+                          placeholder="e.g. NY"
+                          className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
+                        />
                       </div>
 
                       {/* Category */}
@@ -418,6 +542,18 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
+            {selectedItems.size > 0 && (
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="p-2 hover:bg-red-500/10 text-red-500 hover:text-red-400 rounded-lg border border-transparent hover:border-red-500/20 transition-all flex items-center gap-2 mr-2"
+                title="Delete Selected"
+              >
+                {deleting ? <RefreshCw className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                <span className="text-xs font-bold uppercase tracking-wide">Delete ({selectedItems.size})</span>
+              </button>
+            )}
+
             <button
               onClick={() => fileInputRef.current?.click()}
               className="p-2 hover:bg-white/5 text-zinc-400 hover:text-zinc-200 rounded-lg border border-transparent hover:border-white/5 transition-all"
@@ -459,6 +595,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
           </div>
         </div>
       </div>
+
 
       {/* Table Container - No Box, Just Content */}
       <div className="flex-1 flex flex-col min-h-0">
@@ -504,8 +641,12 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                     </td>
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-4">
-                        <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-xs font-bold text-zinc-500 border border-white/5 group-hover:border-bronze-500/30 group-hover:text-bronze-500 transition-colors">
-                          {item.title.charAt(0)}
+                        <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-xs font-bold text-zinc-500 border border-white/5 group-hover:border-bronze-500/30 group-hover:text-bronze-500 transition-colors overflow-hidden">
+                          {profilePics[item.phone || ''] ? (
+                            <img src={profilePics[item.phone!]} alt={item.title} className="w-full h-full object-cover" />
+                          ) : (
+                            item.title.charAt(0)
+                          )}
                         </div>
                         <div className="flex flex-col">
                           <span className="font-semibold text-zinc-200 text-sm group-hover:text-white transition-colors">
@@ -529,32 +670,38 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                         <HighlightText text={item.category || 'N/A'} highlight={filters.category} />
                       </span>
                     </td>
-                    <td className="py-4 px-4 text-sm text-zinc-500">
+                    <td className="py-4 px-4">
                       <div className="flex flex-col">
-                        <HighlightText text={item.city || ''} highlight={filters.city || searchTerm} />
-                        <span className="text-xs text-zinc-600">
+                        <span className="text-zinc-300 text-sm">
+                          <HighlightText text={item.city || '-'} highlight={filters.city} />
+                        </span>
+                        <span className="text-zinc-500 text-xs">
                           <HighlightText text={item.state || ''} highlight={filters.state} />
                         </span>
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium border ${item.status === 'sent'
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide border uppercase ${item.status === 'sent'
                         ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
                         : item.status === 'error'
                           ? 'bg-red-500/10 text-red-500 border-red-500/20'
-                          : 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'
+                          : 'bg-zinc-800 text-zinc-400 border-zinc-700'
                         }`}>
-                        {item.status === 'sent' && <CheckCircle size={10} />}
-                        {item.status === 'error' && <AlertCircle size={10} />}
-                        {item.status === 'not sent' && <Clock size={10} />}
-                        <span className="capitalize">{item.status}</span>
-                      </div>
+                        {item.status === 'sent' ? (
+                          <CheckCircle size={12} className="mr-1" />
+                        ) : item.status === 'error' ? (
+                          <AlertCircle size={12} className="mr-1" />
+                        ) : (
+                          <Clock size={12} className="mr-1" />
+                        )}
+                        {item.status}
+                      </span>
                     </td>
                     <td className="py-4 px-4 text-right">
                       <button
                         onClick={() => handleContact(item)}
-                        className="p-2 hover:bg-white/5 rounded-lg text-zinc-500 hover:text-bronze-400 transition-colors"
-                        title="Contact"
+                        className="p-2 hover:bg-white/10 text-zinc-400 hover:text-white rounded-lg transition-colors"
+                        title={t('common.message')}
                       >
                         <MessageSquare size={16} />
                       </button>
@@ -563,8 +710,8 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-zinc-500 text-sm">
-                    No leads found matching your filters.
+                  <td colSpan={7} className="py-12 text-center text-zinc-500">
+                    {t('common.noItemsFound')}
                   </td>
                 </tr>
               )}
@@ -572,6 +719,13 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
           </table>
         </div>
       </div>
-    </div>
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
+    </div >
   );
 };

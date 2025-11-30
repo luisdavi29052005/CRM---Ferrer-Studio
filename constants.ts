@@ -24,14 +24,14 @@ export const MOCK_WAHA_CHATS: WahaChat[] = [
 
 export const MOCK_MESSAGES: Record<string, Message[]> = {
   '5511999992222@c.us': [
-    { id: 'm1', text: 'Hello Roberto, I saw Tech Solutions is growing fast.', fromMe: true, timestamp: 1698420000000, isAiGenerated: true },
+    { id: 'm1', text: 'Hello Roberto, I saw Tech Solutions is growing fast.', fromMe: true, timestamp: 1698420000000 },
     { id: 'm2', text: 'Yes, we are looking for new tools.', fromMe: false, timestamp: 1698420500000 },
-    { id: 'm3', text: 'Our system can automate 80% of your outbound.', fromMe: true, timestamp: 1698421000000, isAiGenerated: true },
+    { id: 'm3', text: 'Our system can automate 80% of your outbound.', fromMe: true, timestamp: 1698421000000 },
     { id: 'm4', text: 'That sounds great, send me the proposal.', fromMe: false, timestamp: 1698432000000 },
   ],
   '5511988887777@c.us': [
     { id: 'm5', text: 'Hi Ana, how much for the chatbot?', fromMe: false, timestamp: 1698340000000 },
-    { id: 'm6', text: 'Here is the pricing list regarding the automation.', fromMe: true, timestamp: 1698345600000, isAiGenerated: true },
+    { id: 'm6', text: 'Here is the pricing list regarding the automation.', fromMe: true, timestamp: 1698345600000 },
   ]
 };
 

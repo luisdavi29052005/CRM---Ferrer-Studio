@@ -4,8 +4,8 @@ import { Database } from '../database.types';
 
 type DBLead = Database['public']['Tables']['leads']['Row'];
 type DBApify = Database['public']['Tables']['apify']['Row'];
-type DBWaha = Database['public']['Tables']['waha']['Row'];
-type DBMessage = Database['public']['Tables']['messages']['Row'];
+type DBWahaChat = Database['public']['Tables']['whatsapp_waha_chats']['Row'];
+type DBWahaMessage = Database['public']['Tables']['whatsapp_waha_messages']['Row'];
 type DBAutomation = Database['public']['Tables']['automations']['Row'];
 
 export const fetchLeads = async (): Promise<Lead[]> => {
@@ -23,18 +23,18 @@ export const fetchLeads = async (): Promise<Lead[]> => {
         id: lead.id.toString(),
         chat_id: lead.chat_id || '',
         name: lead.name || 'Unknown',
-        business: lead.business || '',
+        business: lead.company_name || lead.name || '', // Updated to use company_name or fallback
         phone: lead.phone || '',
-        city: lead.city || '',
-        state: lead.state || '',
-        category: lead.category || '',
-        stage: (lead.stage as Stage) || 'New',
-        temperature: (lead.temperature as Temperature) || 'Cold',
-        score: lead.score || 0,
-        budget: lead.budget ? parseFloat(lead.budget) : 0,
-        notes: lead.notes || '',
+        city: '', // Not in new schema? Checking types... it was in DBLead before. Let's keep empty for now or check schema.
+        state: '',
+        category: '',
+        stage: (lead.status as Stage) || 'New', // Mapped status to stage
+        temperature: 'Cold', // Default
+        score: lead.value ? Math.min(lead.value / 100, 100) : 0, // Mock score from value
+        budget: lead.value || 0,
+        notes: '',
         source: (lead.source as Source) || 'manual',
-        last_interaction: lead.updated_at ? new Date(lead.updated_at).toLocaleDateString() : 'Never',
+        last_interaction: lead.last_contact ? new Date(lead.last_contact).toLocaleDateString() : 'Never',
     }));
 };
 
@@ -63,47 +63,82 @@ export const fetchApifyLeads = async (): Promise<ApifyLead[]> => {
     }));
 };
 
+export const deleteApifyLeads = async (ids: string[]): Promise<void> => {
+    const { error } = await supabase
+        .from('apify')
+        .delete()
+        .in('id', ids);
+
+    if (error) {
+        console.error('Error deleting apify leads:', error);
+        throw error;
+    }
+};
+
 export const fetchWahaChats = async (): Promise<WahaChat[]> => {
     const { data, error } = await supabase
-        .from('waha')
+        .from('whatsapp_waha_chats')
         .select('*')
-        .order('last_timestamp', { ascending: false });
+        .order('last_message_at', { ascending: false });
 
     if (error) {
         console.error('Error fetching waha chats:', error);
         return [];
     }
 
-    return (data as DBWaha[]).map(chat => ({
+    return (data as DBWahaChat[]).map(chat => ({
         id: chat.id.toString(),
-        chatID: chat.chatID || '',
-        push_name: chat.push_name || 'Unknown',
-        last_text: chat.last_text || '',
-        last_from_me: chat.last_from_me || false,
-        last_timestamp: chat.last_timestamp || 0,
-        status: (chat.status as WahaStatus) || 'sent',
-        unreadCount: chat.unreadCount || 0,
+        chatID: chat.chat_jid || '',
+        push_name: chat.name || 'Unknown',
+        last_text: chat.last_message || '',
+        last_from_me: chat.last_message_from_me || false,
+        last_timestamp: chat.last_message_at ? new Date(chat.last_message_at).getTime() : 0,
+        status: 'sent', // Default
+        unreadCount: chat.unread_count || 0,
     }));
 };
 
 export const fetchMessages = async (chatId: string): Promise<Message[]> => {
+    // We need to find the chat_id (int) from the chat_jid (string) first, 
+    // OR we can join. But for now, let's assume we can query by chat_id if we have it, 
+    // OR we query by joining.
+    // Actually, the messages table uses the integer ID of the chat.
+    // But the frontend passes the chatJid (string).
+    // So we need to look up the chat first.
+
+    const { data: chatData, error: chatError } = await supabase
+        .from('whatsapp_waha_chats')
+        .select('id')
+        .eq('chat_jid', chatId)
+        .single();
+
+    if (chatError || !chatData) {
+        // If chat not found, return empty or try to fetch by string ID if logic changes
+        console.error('Error fetching chat for messages:', chatError);
+        return [];
+    }
+
     const { data, error } = await supabase
-        .from('messages')
+        .from('whatsapp_waha_messages')
         .select('*')
-        .eq('chat_id', chatId)
-        .order('timestamp', { ascending: true });
+        .eq('chat_id', chatData.id)
+        .order('message_timestamp', { ascending: true });
 
     if (error) {
         console.error('Error fetching messages:', error);
         return [];
     }
 
-    return (data as DBMessage[]).map(msg => ({
+    return (data as DBWahaMessage[]).map(msg => ({
         id: msg.id.toString(),
-        text: msg.text || '',
+        text: msg.body || '',
         fromMe: msg.from_me || false,
-        timestamp: msg.timestamp || 0,
-        isAiGenerated: msg.is_ai_generated || false,
+        timestamp: msg.message_timestamp ? new Date(msg.message_timestamp).getTime() : 0,
+        isAiGenerated: false, // Not yet in DB schema
+        ack: msg.ack || 0,
+        mediaUrl: msg.media_url || undefined,
+        mediaType: msg.type as any || undefined,
+        caption: msg.media_caption || undefined
     }));
 };
 
@@ -162,6 +197,55 @@ export const checkWahaStatus = async (): Promise<'WORKING' | 'FAILED' | 'STOPPED
     }
 };
 
+export const checkNumberExists = async (phone: string): Promise<boolean> => {
+    try {
+        // Format phone number: remove non-digits (leave only raw numbers)
+        const cleanPhone = phone.replace(/\D/g, '');
+        console.log(`[checkNumberExists] Raw: "${phone}" -> Clean: "${cleanPhone}"`);
+
+        if (!cleanPhone) return false;
+
+        // Endpoint: /api/contacts/check-exists?phone={phone}&session=default
+        const response = await fetch(`http://localhost:3000/api/contacts/check-exists?phone=${cleanPhone}&session=default`);
+
+        if (!response.ok) {
+            console.error('Error checking number existence:', response.statusText);
+            return false;
+        }
+
+        const data = await response.json();
+        return data.numberExists === true;
+    } catch (error) {
+        console.error('Error checking number existence for', phone, error);
+        return false;
+    }
+};
+
+export const fetchContactProfilePic = async (chatId: string): Promise<string | null> => {
+    try {
+        // Ensure chatId is formatted correctly (e.g. has @c.us if it's just a number)
+        let formattedId = chatId;
+        if (!chatId.includes('@')) {
+            formattedId = `${chatId.replace(/\D/g, '')}@c.us`;
+        }
+
+        const response = await fetch(`http://localhost:3000/api/contacts/profile-picture?contactId=${encodeURIComponent(formattedId)}&refresh=false&session=default`);
+        if (response.ok) {
+            const data = await response.json();
+            return data.profilePictureURL || null;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error fetching profile pic:', error);
+        return null;
+    }
+};
+
+export const formatChatId = (chatId: string) => {
+    const numericId = chatId.replace(/\D/g, '');
+    return `${numericId}@c.us`;
+};
+
 export const fetchWahaProfile = async (): Promise<{ id: string, name: string, picture: string } | null> => {
     try {
         const response = await fetch('http://localhost:3000/api/default/profile', {
@@ -177,8 +261,7 @@ export const fetchWahaProfile = async (): Promise<{ id: string, name: string, pi
     }
 };
 
-export const sendMessage = async (chatId: string, text: string): Promise<{ success: boolean; message?: Message; error?: string }> => {
-    // 1. Send to WAHA
+export const sendMessage = async (chatId: string, text: string): Promise<{ success: boolean, error?: string, message?: any }> => {
     try {
         const sendToWaha = async () => {
             // Sanitize chatId: remove non-digits, ensure @c.us suffix
@@ -236,33 +319,44 @@ export const sendMessage = async (chatId: string, text: string): Promise<{ succe
     const timestamp = Date.now();
 
     const { error: wahaError } = await supabase
-        .from('waha')
+        .from('whatsapp_waha_chats')
         .upsert({
-            chatID: formattedChatId,
-            last_text: text,
-            last_from_me: true,
-            last_timestamp: timestamp,
-            status: 'sent',
-            push_name: formattedChatId, // Fallback name
-            unreadCount: 0
-        }, { onConflict: 'chatID' });
+            chat_jid: formattedChatId,
+            last_message: text,
+            last_message_from_me: true,
+            last_message_at: new Date(timestamp).toISOString(),
+            name: formattedChatId, // Fallback name, ideally we get this from existing chat or input
+            unread_count: 0
+        }, { onConflict: 'chat_jid' });
 
     if (wahaError) {
         console.error('Error upserting waha chat:', wahaError);
-        // We continue even if upsert fails, hoping it exists, but it likely won't.
-        // Actually, if it fails, the message insert will likely fail too.
     }
 
     // 3. Insert Message
+    // First get the internal ID of the chat
+    const { data: chatData, error: fetchChatError } = await supabase
+        .from('whatsapp_waha_chats')
+        .select('id')
+        .eq('chat_jid', formattedChatId)
+        .single();
+
+    if (fetchChatError || !chatData) {
+        console.error('Error fetching chat ID for message insertion:', fetchChatError);
+        return { success: false, error: `Database Error: Could not find chat to insert message` };
+    }
+
     const { data, error } = await supabase
-        .from('messages')
+        .from('whatsapp_waha_messages')
         .insert([
             {
-                chat_id: formattedChatId,
-                text: text,
+                chat_id: chatData.id,
+                body: text,
                 from_me: true,
-                timestamp: timestamp,
-                is_ai_generated: false
+                message_timestamp: new Date(timestamp).toISOString(),
+                from_jid: formattedChatId,
+                has_media: false,
+                ack: 1 // Sent
             }
         ])
         .select()
@@ -273,22 +367,18 @@ export const sendMessage = async (chatId: string, text: string): Promise<{ succe
         return { success: false, error: `Database Error: ${error.message}` };
     }
 
-    const msg = data as DBMessage;
+    const msg = data as DBWahaMessage;
     return {
         success: true,
         message: {
             id: msg.id.toString(),
-            text: msg.text || '',
+            text: msg.body || '',
             fromMe: msg.from_me || false,
-            timestamp: msg.timestamp || 0,
-            isAiGenerated: msg.is_ai_generated || false,
+            timestamp: msg.message_timestamp ? new Date(msg.message_timestamp).getTime() : 0,
+            isAiGenerated: false,
+            ack: msg.ack || 1
         }
     };
-};
-
-const formatChatId = (chatId: string) => {
-    const numericId = chatId.replace(/\D/g, '');
-    return `${numericId}@c.us`;
 };
 
 export const sendImage = async (chatId: string, file: { mimetype: string, filename: string, url: string, caption?: string }) => {
@@ -395,6 +485,7 @@ export const sendContact = async (chatId: string, contact: { fullName: string, p
     });
 };
 
+
 export const startTyping = async (chatId: string) => {
     const formattedChatId = formatChatId(chatId);
     return await fetch('http://localhost:3000/api/startTyping', {
@@ -429,6 +520,46 @@ export const sendReaction = async (messageId: string, emoji: string) => {
             session: 'default'
         })
     });
+};
+
+export const setPresence = async (status: 'online' | 'offline', session: string = 'default') => {
+    try {
+        await fetch(`http://localhost:3000/api/${session}/presence`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ presence: status })
+        });
+    } catch (e) {
+        console.error("Error setting presence:", e);
+    }
+};
+
+export const checkPresence = async (chatId: string, session: string = 'default'): Promise<'online' | 'offline' | 'unknown'> => {
+    try {
+        const formattedChatId = formatChatId(chatId);
+        const response = await fetch(`http://localhost:3000/api/${session}/presence/${formattedChatId}`);
+        if (response.ok) {
+            const data = await response.json();
+            // WAHA might return { status: 'online' } or { presence: 'online' }
+            const status = data.presence || data.status || 'unknown';
+            return status as 'online' | 'offline' | 'unknown';
+        }
+        return 'unknown';
+    } catch (e) {
+        console.error("Error checking presence:", e);
+        return 'unknown';
+    }
+};
+
+export const subscribePresence = async (chatId: string, session: string = 'default') => {
+    try {
+        const formattedChatId = formatChatId(chatId);
+        await fetch(`http://localhost:3000/api/${session}/presence/${formattedChatId}/subscribe`, {
+            method: 'POST',
+        });
+    } catch (e) {
+        console.error("Error subscribing to presence:", e);
+    }
 };
 
 export const fetchAutomations = async (): Promise<AutomationFlow[]> => {
@@ -511,7 +642,6 @@ export const authActions = {
                 .single();
 
             if (data) {
-                console.log("Profile found:", data);
                 return data;
             }
 
