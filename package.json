@@ -11,6 +11,9 @@
   },
   "dependencies": {
     "@paypal/agent-toolkit": "^1.8.0",
+    "@radix-ui/react-context-menu": "^2.2.16",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-popover": "^1.1.15",
     "@supabase/supabase-js": "^2.86.0",
     "@types/d3-scale": "^4.0.9",
     "@types/papaparse": "^5.5.0",

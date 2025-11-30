@@ -645,7 +645,7 @@ const App = () => {
               </header>
 
               {/* Page Content Scrollable Area */}
-              <div className="flex-1 overflow-y-auto custom-scrollbar">
+              <div className={`flex-1 ${activeView === 'chat' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
                 <div className="h-full">
                   <AnimatePresence mode="wait">
                     <motion.div

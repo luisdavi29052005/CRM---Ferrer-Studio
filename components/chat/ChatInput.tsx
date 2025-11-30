@@ -1,7 +1,8 @@
 // @ts-nocheck
 import React, { useState, useRef } from 'react';
-import { Paperclip, Send, Smile, Mic, Image, Video, File, User, MapPin, BarChart2 } from 'lucide-react';
+import { Plus, Send, Smile, Mic, Image, Video, File, User, MapPin, BarChart2, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import * as Popover from '@radix-ui/react-popover';
 
 interface ChatInputProps {
     onSendMessage: (text: string) => void;
@@ -12,7 +13,6 @@ interface ChatInputProps {
 
 export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onSendMedia, onTyping, isSending }) => {
     const [text, setText] = useState('');
-    const [showAttachMenu, setShowAttachMenu] = useState(false);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -56,49 +56,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onSendMedia
                 file.type.startsWith('video/') ? 'video' :
                     file.type.startsWith('audio/') ? 'audio' : 'file';
             onSendMedia(file, type);
-            setShowAttachMenu(false);
         }
     };
 
     return (
-        <div className="p-4 bg-zinc-900/50 border-t border-zinc-800/50 backdrop-blur-sm">
-            <div className="flex items-end gap-2 max-w-4xl mx-auto relative">
-                {/* Attachment Menu */}
-                <AnimatePresence>
-                    {showAttachMenu && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                            className="absolute bottom-14 left-0 bg-zinc-800 rounded-xl shadow-xl border border-zinc-700/50 p-2 grid grid-cols-3 gap-2 mb-2 z-20"
-                        >
-                            {[
-                                { icon: Image, label: 'Image', color: 'text-purple-400', bg: 'bg-purple-400/10', accept: 'image/*' },
-                                { icon: File, label: 'Document', color: 'text-blue-400', bg: 'bg-blue-400/10', accept: '*' },
-                                { icon: User, label: 'Contact', color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-                                { icon: MapPin, label: 'Location', color: 'text-orange-400', bg: 'bg-orange-400/10' },
-                                { icon: BarChart2, label: 'Poll', color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
-                            ].map((item, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => {
-                                        if (item.accept && fileInputRef.current) {
-                                            fileInputRef.current.accept = item.accept;
-                                            fileInputRef.current.click();
-                                        }
-                                    }}
-                                    className="flex flex-col items-center justify-center p-3 rounded-lg hover:bg-zinc-700/50 transition-colors gap-1 group"
-                                >
-                                    <div className={`p-2 rounded-full ${item.bg} ${item.color} group-hover:scale-110 transition-transform`}>
-                                        <item.icon className="w-5 h-5" />
-                                    </div>
-                                    <span className="text-[10px] text-zinc-400 font-medium">{item.label}</span>
-                                </button>
-                            ))}
-                        </motion.div>
-                    )}
-                </AnimatePresence>
-
+        <div className="p-2 bg-[#202c33] border-t border-white/5 relative z-20">
+            <div className="flex items-end gap-2 max-w-5xl mx-auto">
+                {/* Hidden File Input */}
                 <input
                     type="file"
                     ref={fileInputRef}
@@ -106,40 +70,76 @@ export const ChatInput: React.FC<ChatInputProps> = ({ onSendMessage, onSendMedia
                     onChange={handleFileSelect}
                 />
 
-                <button
-                    onClick={() => setShowAttachMenu(!showAttachMenu)}
-                    className={`p-3 rounded-full transition-all duration-200 ${showAttachMenu ? 'bg-zinc-700 text-white rotate-45' : 'text-zinc-400 hover:text-white hover:bg-zinc-800'}`}
-                >
-                    <Paperclip className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-1 mb-1">
+                    {/* Attach Button with Popover (Plus Icon) */}
+                    <Popover.Root>
+                        <Popover.Trigger asChild>
+                            <button className="p-2 text-zinc-400 hover:text-white transition-colors">
+                                <Plus size={24} strokeWidth={1.5} />
+                            </button>
+                        </Popover.Trigger>
+                        <Popover.Portal>
+                            <Popover.Content className="bg-[#233138] rounded-xl border border-white/5 p-2 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200 mb-4 ml-4" sideOffset={5} align="start">
+                                <div className="grid grid-cols-1 gap-1 w-40">
+                                    {[
+                                        { icon: Image, label: 'Photos & Videos', color: 'text-purple-400', bg: 'hover:bg-white/5', accept: 'image/*,video/*' },
+                                        { icon: File, label: 'Document', color: 'text-blue-400', bg: 'hover:bg-white/5', accept: '*' },
+                                        { icon: User, label: 'Contact', color: 'text-emerald-400', bg: 'hover:bg-white/5' },
+                                        { icon: BarChart2, label: 'Poll', color: 'text-yellow-400', bg: 'hover:bg-white/5' },
+                                    ].map((item, index) => (
+                                        <button
+                                            key={index}
+                                            onClick={() => {
+                                                if (item.accept && fileInputRef.current) {
+                                                    fileInputRef.current.accept = item.accept;
+                                                    fileInputRef.current.click();
+                                                }
+                                            }}
+                                            className={`flex items-center w-full p-2 rounded-lg transition-colors gap-3 ${item.bg}`}
+                                        >
+                                            <item.icon className={`w-5 h-5 ${item.color}`} />
+                                            <span className="text-sm text-zinc-200">{item.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </Popover.Content>
+                        </Popover.Portal>
+                    </Popover.Root>
 
-                <div className="flex-1 bg-zinc-800/50 rounded-2xl border border-zinc-700/50 focus-within:border-emerald-500/50 focus-within:bg-zinc-800 transition-all duration-200 flex items-end">
+                    {/* Emoji Button */}
+                    <button className="p-2 text-zinc-400 hover:text-white transition-colors">
+                        <Smile size={24} strokeWidth={1.5} />
+                    </button>
+                </div>
+
+                {/* Input Area */}
+                <div className="flex-1 bg-[#2a3942] rounded-lg transition-all flex items-end p-1.5 min-h-[42px] mb-0.5">
                     <textarea
                         value={text}
                         onChange={handleTextChange}
                         onKeyDown={handleKeyDown}
-                        placeholder="Type a message..."
-                        className="w-full bg-transparent text-zinc-100 placeholder-zinc-500 px-4 py-3 min-h-[44px] max-h-[120px] resize-none focus:outline-none custom-scrollbar"
+                        placeholder="Type a message"
+                        className="flex-1 bg-transparent border-none focus:ring-0 text-zinc-200 placeholder:text-zinc-400 resize-none max-h-32 py-1 px-3 text-[15px] custom-scrollbar leading-relaxed"
                         rows={1}
+                        style={{ minHeight: '24px' }}
                     />
-                    <button className="p-3 text-zinc-400 hover:text-yellow-400 transition-colors">
-                        <Smile className="w-5 h-5" />
-                    </button>
                 </div>
 
-                {text.trim() ? (
-                    <button
-                        onClick={handleSend}
-                        disabled={isSending}
-                        className="p-3 bg-emerald-600 text-white rounded-full hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-900/20 transition-all duration-200 hover:scale-105 active:scale-95"
-                    >
-                        <Send className="w-5 h-5" />
-                    </button>
-                ) : (
-                    <button className="p-3 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-full transition-all duration-200">
-                        <Mic className="w-5 h-5" />
-                    </button>
-                )}
+                {/* Send / Mic Button */}
+                <button
+                    onClick={text.trim() ? handleSend : undefined}
+                    disabled={isSending}
+                    className={`p-3 rounded-full flex items-center justify-center transition-all ${text.trim()
+                        ? 'text-emerald-500 hover:bg-zinc-800'
+                        : 'text-zinc-400 hover:bg-zinc-800'
+                        } mb-0.5`}
+                >
+                    {text.trim() ? (
+                        <Send size={24} className={isSending ? 'opacity-50' : ''} />
+                    ) : (
+                        <Mic size={24} />
+                    )}
+                </button>
             </div>
         </div>
     );

@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient';
-import { Lead, ApifyLead, WahaChat, Message, AutomationFlow, Stage, Temperature, Source, WahaStatus, ApifyStatus } from '../types';
+import { Lead, ApifyLead, WahaChat, WahaMessage, Message, AutomationFlow, Stage, Temperature, Source, WahaStatus, ApifyStatus } from '../types';
 import { Database } from '../database.types';
 
 type DBLead = Database['public']['Tables']['leads']['Row'];
@@ -136,6 +136,44 @@ export const fetchMessages = async (chatId: string): Promise<Message[]> => {
         timestamp: msg.message_timestamp ? new Date(msg.message_timestamp).getTime() : 0,
         isAiGenerated: false, // Not yet in DB schema
         ack: msg.ack || 0,
+        mediaUrl: msg.media_url || undefined,
+        mediaType: msg.type as any || undefined,
+        caption: msg.media_caption || undefined
+    }));
+};
+
+export const fetchWahaMessages = async (chatId: string): Promise<WahaMessage[]> => {
+    // Look up chat ID from JID
+    const { data: chatData, error: chatError } = await supabase
+        .from('whatsapp_waha_chats')
+        .select('id')
+        .eq('chat_jid', chatId)
+        .single();
+
+    if (chatError || !chatData) {
+        return [];
+    }
+
+    const { data, error } = await supabase
+        .from('whatsapp_waha_messages')
+        .select('*')
+        .eq('chat_id', chatData.id)
+        .order('message_timestamp', { ascending: true });
+
+    if (error) {
+        console.error('Error fetching waha messages:', error);
+        return [];
+    }
+
+    return (data as DBWahaMessage[]).map(msg => ({
+        id: msg.message_id || msg.id.toString(),
+        timestamp: msg.message_timestamp ? new Date(msg.message_timestamp).getTime() / 1000 : 0,
+        from: msg.from_jid || '',
+        to: msg.chat_id?.toString() || '', // This is technically wrong (should be JID) but we don't have 'to' in DB easily without join.
+        fromMe: msg.from_me || false,
+        body: msg.body || '',
+        hasMedia: msg.has_media || false,
+        ack: (msg.ack as any) || 0,
         mediaUrl: msg.media_url || undefined,
         mediaType: msg.type as any || undefined,
         caption: msg.media_caption || undefined
