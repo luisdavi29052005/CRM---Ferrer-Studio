@@ -195,23 +195,29 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1.5">
                           <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">City</label>
-                          <input
-                            type="text"
+                          <select
                             value={filters.city}
                             onChange={(e) => setFilters({ ...filters, city: e.target.value })}
-                            placeholder="e.g. New York"
-                            className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
-                          />
+                            className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors appearance-none"
+                          >
+                            <option value="">All Cities</option>
+                            {Array.from(new Set(leads.map(lead => lead.city).filter(Boolean))).sort().map((city) => (
+                              <option key={city} value={city}>{city}</option>
+                            ))}
+                          </select>
                         </div>
                         <div className="space-y-1.5">
                           <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">State</label>
-                          <input
-                            type="text"
+                          <select
                             value={filters.state}
                             onChange={(e) => setFilters({ ...filters, state: e.target.value })}
-                            placeholder="e.g. NY"
-                            className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
-                          />
+                            className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors appearance-none"
+                          >
+                            <option value="">All States</option>
+                            {Array.from(new Set(leads.map(lead => lead.state).filter(Boolean))).sort().map((state) => (
+                              <option key={state} value={state}>{state}</option>
+                            ))}
+                          </select>
                         </div>
                       </div>
 
