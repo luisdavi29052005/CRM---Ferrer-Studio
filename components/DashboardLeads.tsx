@@ -55,7 +55,7 @@ export const DashboardLeads: React.FC<DashboardLeadsProps> = ({ leads, chartData
     return (
         <div className="flex flex-col h-full">
             {/* Metrics Row */}
-            <div className="flex items-center justify-start gap-12 mb-12 px-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-start gap-6 sm:gap-12 mb-8 sm:mb-12 px-2">
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 text-zinc-500 mb-1">
                         <Users size={14} />
@@ -67,7 +67,7 @@ export const DashboardLeads: React.FC<DashboardLeadsProps> = ({ leads, chartData
                     </div>
                 </div>
 
-                <div className="w-px h-12 bg-white/5"></div>
+                <div className="hidden sm:block w-px h-12 bg-white/5"></div>
 
                 <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2 text-zinc-500 mb-1">

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { User, Globe, Zap, Save, Check, AlertCircle, RefreshCw, Smartphone, CreditCard, Database } from 'lucide-react';
 import { updateProfile } from '../services/supabaseService';
+import { settingsService } from '../services/settingsService';
 
 interface SettingsProps {
     user: {
@@ -14,11 +15,12 @@ interface SettingsProps {
     };
     wahaStatus: 'WORKING' | 'FAILED' | 'STOPPED' | 'STARTING' | 'UNKNOWN';
     onUpdateProfile: () => void;
+    isAdmin: boolean;
 }
 
-export const Settings: React.FC<SettingsProps> = ({ user, wahaStatus, onUpdateProfile }) => {
+export const Settings: React.FC<SettingsProps> = ({ user, wahaStatus, onUpdateProfile, isAdmin }) => {
     const { t, i18n } = useTranslation();
-    const [activeTab, setActiveTab] = useState<'account' | 'general' | 'integrations'>('account');
+    const [activeTab, setActiveTab] = useState<'account' | 'general' | 'integrations' | 'system'>('account');
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState('');
     const [error, setError] = useState('');
@@ -26,6 +28,10 @@ export const Settings: React.FC<SettingsProps> = ({ user, wahaStatus, onUpdatePr
     // Form States
     const [name, setName] = useState(user.name);
     const [avatarUrl, setAvatarUrl] = useState(user.avatar);
+
+
+
+
 
     const handleSaveProfile = async () => {
         setLoading(true);
@@ -50,11 +56,11 @@ export const Settings: React.FC<SettingsProps> = ({ user, wahaStatus, onUpdatePr
     const tabs = [
         { id: 'account', label: t('settings.tabs.account'), icon: User },
         { id: 'general', label: t('settings.tabs.general'), icon: Globe },
-        { id: 'integrations', label: t('settings.tabs.integrations'), icon: Zap },
+        { id: 'general', label: t('settings.tabs.general'), icon: Globe },
     ];
 
     return (
-        <div className="flex flex-col md:flex-row h-full max-w-5xl mx-auto p-8 gap-12">
+        <div className="flex flex-col md:flex-row h-full max-w-5xl mx-auto p-4 md:p-8 gap-6 md:gap-12">
             {/* Minimalist Sidebar */}
             <div className="w-full md:w-56 flex-shrink-0">
                 <h2 className="text-2xl font-bold text-zinc-100 mb-8 tracking-tight">{t('settings.title')}</h2>
@@ -188,67 +194,8 @@ export const Settings: React.FC<SettingsProps> = ({ user, wahaStatus, onUpdatePr
                             </div>
                         )}
 
-                        {/* INTEGRATIONS */}
-                        {activeTab === 'integrations' && (
-                            <div className="space-y-10">
-                                <div>
-                                    <h3 className="text-lg font-semibold text-zinc-100 mb-1">{t('settings.integrations.header')}</h3>
-                                    <p className="text-sm text-zinc-500">{t('settings.integrations.subheader')}</p>
-                                </div>
 
-                                <div className="space-y-8">
-                                    {/* WhatsApp Status */}
-                                    <div className="flex items-center justify-between py-2">
-                                        <div className="flex items-center gap-4">
-                                            <Smartphone size={20} className="text-zinc-500" />
-                                            <div>
-                                                <h4 className="font-medium text-zinc-200 text-sm">WhatsApp (WAHA)</h4>
-                                                <p className="text-xs text-zinc-500">Messaging API</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className={`w-2 h-2 rounded-full ${wahaStatus === 'WORKING' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                                            <span className="text-xs font-medium text-zinc-400">{wahaStatus === 'WORKING' ? 'Connected' : 'Disconnected'}</span>
-                                        </div>
-                                    </div>
 
-                                    {/* PayPal Status */}
-                                    <div className="flex items-center justify-between py-2 border-t border-white/5 pt-6">
-                                        <div className="flex items-center gap-4">
-                                            <CreditCard size={20} className="text-zinc-500" />
-                                            <div>
-                                                <h4 className="font-medium text-zinc-200 text-sm">PayPal</h4>
-                                                <p className="text-xs text-zinc-500">Payment Gateway</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-600 border border-zinc-800 px-2 py-0.5 rounded">
-                                                {process.env.PAYPAL_ENVIRONMENT || 'SANDBOX'}
-                                            </span>
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                                <span className="text-xs font-medium text-zinc-400">Active</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Apify Status */}
-                                    <div className="flex items-center justify-between py-2 border-t border-white/5 pt-6">
-                                        <div className="flex items-center gap-4">
-                                            <Database size={20} className="text-zinc-500" />
-                                            <div>
-                                                <h4 className="font-medium text-zinc-200 text-sm">Apify</h4>
-                                                <p className="text-xs text-zinc-500">Lead Scraper</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                            <span className="text-xs font-medium text-zinc-400">Active</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </motion.div>
                 </AnimatePresence>
             </div>

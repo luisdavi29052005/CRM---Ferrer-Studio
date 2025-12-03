@@ -34,7 +34,8 @@
         "waha_api": "API WAHA",
         "n8n_workflow": "Fluxo n8n",
         "online": "Online",
-        "active": "Ativo"
+        "active": "Ativo",
+        "system_settings": "Configurações do Sistema"
     },
     "header": {
         "overview": "Visão Geral",
@@ -255,6 +256,13 @@
         "integrations": {
             "header": "Integrações",
             "subheader": "Gerencie seus serviços conectados."
-        }
+        },
+        "system": {
+            "title": "Configurações do Sistema",
+            "description": "Configure parâmetros globais do sistema e conexões de API.",
+            "header": "Configuração do Sistema",
+            "subheader": "Gerencie configurações globais e conexões de API."
+        },
+        "system_updated": "Configurações do sistema atualizadas com sucesso"
     }
 }

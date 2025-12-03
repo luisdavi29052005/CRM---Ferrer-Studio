@@ -1,4 +1,5 @@
 import { PayPalAgentToolkit } from '@paypal/agent-toolkit/ai-sdk';
+import { settingsService } from './settingsService';
 
 // Initialize the PayPal Agent Toolkit
 // We use the access token provided in the environment variables
@@ -118,9 +119,9 @@ const getPayPalToken = async (): Promise<string> => {
         return accessToken;
     }
 
-    const clientId = process.env.PAYPAL_CLIENT_ID;
-    const clientSecret = process.env.PAYPAL_SECRET;
-    const environment = process.env.PAYPAL_ENVIRONMENT || 'SANDBOX';
+    const clientId = (await settingsService.getSetting('paypal_client_id') || '').trim();
+    const clientSecret = (await settingsService.getSetting('paypal_secret') || '').trim();
+    const environment = await settingsService.getSetting('paypal_env') || 'SANDBOX';
     const baseUrl = environment === 'PRODUCTION'
         ? 'https://api-m.paypal.com'
         : 'https://api-m.sandbox.paypal.com';
@@ -138,7 +139,7 @@ const getPayPalToken = async (): Promise<string> => {
                 'Authorization': `Basic ${auth}`,
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
-            body: 'grant_type=client_credentials'
+            body: 'grant_type=client_credentials&ignoreCache=true&return_authn_schemes=true&return_client_metadata=true&return_unconsented_scopes=true'
         });
 
         if (!response.ok) {
@@ -160,7 +161,7 @@ const getPayPalToken = async (): Promise<string> => {
 export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1y' = '30d'): Promise<PayPalDashboardData> => {
     try {
         const token = await getPayPalToken();
-        const environment = process.env.PAYPAL_ENVIRONMENT || 'SANDBOX';
+        const environment = await settingsService.getSetting('paypal_env') || 'SANDBOX';
         const baseUrl = environment === 'PRODUCTION'
             ? 'https://api-m.paypal.com'
             : 'https://api-m.sandbox.paypal.com';
@@ -201,7 +202,12 @@ export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1
                     'Accept': 'application/json'
                 }
             });
-            if (!response.ok) throw new Error(`PayPal API Error: ${response.status}`);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`PayPal API Error (${response.status}):`, errorText);
+                throw new Error(`PayPal API Error: ${response.status} - ${errorText}`);
+            }
             return response.json();
         };
 
@@ -383,7 +389,7 @@ export const getInternationalEarnings = async (range: '30d' | '90d' | 'ytd' | '1
 export const getPayPalOrderDetails = async (orderId: string): Promise<any> => {
     try {
         const token = await getPayPalToken();
-        const environment = process.env.PAYPAL_ENVIRONMENT || 'SANDBOX';
+        const environment = await settingsService.getSetting('paypal_env') || 'SANDBOX';
         const baseUrl = environment === 'PRODUCTION'
             ? 'https://api-m.paypal.com'
             : 'https://api-m.sandbox.paypal.com';

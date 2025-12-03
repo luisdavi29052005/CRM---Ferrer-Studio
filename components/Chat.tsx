@@ -1,16 +1,19 @@
 // @ts-nocheck
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { wahaService } from '../services/wahaService';
 import { WahaChat, WahaMessage } from '../types/waha';
 import { ChatSidebar } from './chat/ChatSidebar';
 import { ChatWindow } from './chat/ChatWindow';
 import { ChatInput } from './chat/ChatInput';
 import { ContactInfo } from './chat/ContactInfo';
+import { ChatLoading } from './chat/ChatLoading';
+import { MediaPreview } from './chat/MediaPreview';
 import { Loader2, QrCode, Smartphone, RefreshCw, MessageSquare } from 'lucide-react';
 import { Lead } from '../types';
-import { fetchLeads, fetchApifyLeads, fetchContactProfilePic, fetchWahaChats, fetchWahaMessages } from '../services/supabaseService';
+import { fetchLeads, fetchApifyLeads, fetchContactProfilePic, fetchWahaChats, fetchWahaMessages, formatChatId } from '../services/supabaseService';
 import { supabase } from '../supabaseClient';
 import { useTranslation } from 'react-i18next';
+import { aiService } from '../services/aiService';
 
 interface ChatProps {
   initialChatId?: string;
@@ -20,107 +23,79 @@ interface ChatProps {
   chats?: any[]; // Legacy prop support
   leads?: any[]; // Legacy prop support
   apifyLeads?: any[]; // Legacy prop support
+  profilePics: Record<string, string>;
+  isLoading?: boolean;
+  onNavigate?: (view: string) => void;
 }
 
-export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead }) => {
+export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profilePics, leads: propLeads, apifyLeads: propApifyLeads, isLoading, onNavigate, chats: propChats }) => {
   const { t } = useTranslation();
   const [sessionName] = useState('default'); // Default session
   const [status, setStatus] = useState<'WORKING' | 'SCAN_QR_CODE' | 'STARTING' | 'STOPPED' | 'FAILED'>('STARTING');
+
+
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
-  const [chats, setChats] = useState<WahaChat[]>([]);
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(initialChatId || null);
+  const [chats, setChats] = useState<WahaChat[]>(propChats || []);
+
+  // Sync chats when prop changes
+  useEffect(() => {
+    if (propChats) {
+      setChats(propChats);
+    }
+  }, [propChats]);
+
+  // Initialize selectedChatId with robust fallback logic to prevent flicker
+  // Initialize selectedChatId with robust fallback logic to prevent flicker
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(() => {
+    console.log('Chat initializing', { initialChatId, initialLead });
+    if (initialChatId) return formatChatId(initialChatId);
+    if (initialLead?.chat_id) return formatChatId(initialLead.chat_id);
+    if (initialLead?.phone) return formatChatId(initialLead.phone);
+    return null;
+  });
+
+  // Ensure selectedChatId updates if props change (e.g. if initialLead was undefined on first render)
+  useEffect(() => {
+    console.log('Chat props changed', { initialChatId, initialLead });
+    if (initialChatId) {
+      setSelectedChatId(formatChatId(initialChatId));
+    } else if (initialLead?.chat_id) {
+      setSelectedChatId(formatChatId(initialLead.chat_id));
+    } else if (initialLead?.phone) {
+      setSelectedChatId(formatChatId(initialLead.phone));
+    }
+  }, [initialChatId, initialLead]);
   const [messages, setMessages] = useState<WahaMessage[]>([]);
   const [wahaProfile, setWahaProfile] = useState<any>(null);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [apifyLeads, setApifyLeads] = useState<any[]>([]);
-  const [profilePics, setProfilePics] = useState<Record<string, string>>({});
+  const [leads, setLeads] = useState<Lead[]>(propLeads || []);
+  const [apifyLeads, setApifyLeads] = useState<any[]>(propApifyLeads || []);
   const [isSending, setIsSending] = useState(false);
   const [showContactInfo, setShowContactInfo] = useState(false);
   const [contactPresence, setContactPresence] = useState<'online' | 'offline' | 'unknown'>('unknown');
+  const [isChatListLoading, setIsChatListLoading] = useState(false);
 
-  // Load CRM Data
+  // AI Processing State
+  const processedMessageIds = useRef<Set<string>>(new Set());
+
+  // Load CRM Data - Use props if available, otherwise fetch (fallback)
   useEffect(() => {
-    const loadData = async () => {
-      const [crmLeads, apify] = await Promise.all([
-        fetchLeads(),
-        fetchApifyLeads()
-      ]);
-      setLeads(crmLeads || []);
-      setApifyLeads(apify || []);
-    };
-    loadData();
-  }, []);
-
-  // 2. Load Chat List
-  const loadChats = async () => {
-    try {
-      // Fetch from both sources in parallel
-      const [wahaChats, supabaseChats] = await Promise.all([
-        wahaService.getChats(sessionName).catch(() => []),
-        fetchWahaChats().catch(() => [])
-      ]);
-
-      // Map Supabase chats to WahaChat format
-      const mappedSupabaseChats: WahaChat[] = supabaseChats.map(c => ({
-        id: c.chatID, // Use JID as ID
-        name: c.push_name,
-        push_name: c.push_name,
-        timestamp: c.last_timestamp / 1000, // Convert ms to s
-        unreadCount: c.unreadCount,
-        isGroup: c.chatID.endsWith('@g.us'),
-        lastMessage: {
-          content: c.last_text,
-          timestamp: c.last_timestamp / 1000
-        },
-        last_text: c.last_text,
-        last_timestamp: c.last_timestamp,
-        status: 'read' // Default
-      }));
-
-      // Merge: Start with Supabase chats (history), then override with WAHA chats (live)
-      const chatMap = new Map<string, WahaChat>();
-
-      mappedSupabaseChats.forEach(c => chatMap.set(c.id, c));
-      wahaChats.forEach(c => chatMap.set(c.id, { ...chatMap.get(c.id), ...c })); // WAHA takes precedence
-
-      // Convert map back to array
-      const mergedChats = Array.from(chatMap.values());
-
-      // 1. Enrich chats with Lead data
-      const enrichedChats = mergedChats.map(chat => {
-        const lead = leads.find(l => l.chat_id === chat.id || l.phone === chat.id.replace('@c.us', ''));
-        return { ...chat, lead };
-      });
-
-      // 2. Add Leads that don't have a chat yet (Virtual Chats)
-      leads.forEach(lead => {
-        const chatId = lead.chat_id || `${lead.phone}@c.us`;
-        if (!chatMap.has(chatId)) {
-          // Check if we already added this via another ID format
-          const alreadyExists = enrichedChats.some(c => c.id === chatId);
-          if (!alreadyExists) {
-            enrichedChats.push({
-              id: chatId,
-              name: lead.name,
-              push_name: lead.name,
-              timestamp: new Date(lead.last_interaction || Date.now()).getTime() / 1000,
-              unreadCount: 0,
-              isGroup: false,
-              lead: lead,
-              last_text: 'Start a conversation',
-              status: 'read'
-            } as WahaChat);
-          }
-        }
-      });
-
-      // Sort by timestamp desc
-      enrichedChats.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-
-      setChats(enrichedChats);
-    } catch (error) {
-      console.error("Error loading chats:", error);
+    if (!propLeads || !propApifyLeads) {
+      const loadData = async () => {
+        const [crmLeads, apify] = await Promise.all([
+          fetchLeads(),
+          fetchApifyLeads()
+        ]);
+        if (!propLeads) setLeads(crmLeads || []);
+        if (!propApifyLeads) setApifyLeads(apify || []);
+      };
+      loadData();
     }
+  }, [propLeads, propApifyLeads]);
+
+  // 2. Load Chat List (Now handled in App.tsx)
+  const refreshChats = async () => {
+    // Optional: Implement manual refresh if needed, or rely on App.tsx polling/subscription
+    console.log("Refresh requested - handled by App.tsx subscription");
   };
 
   // 1. Session Monitoring (Simple Polling)
@@ -148,7 +123,7 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead }) => {
               console.error("Failed to fetch profile", e);
             }
           }
-          loadChats();
+          // loadChats(); // Removed
         }
       } catch (e) {
         // Session doesn't exist, try to create/start
@@ -166,41 +141,6 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead }) => {
     const interval = setInterval(checkSessionStatus, 3000);
     return () => clearInterval(interval);
   }, [checkSessionStatus]);
-
-
-  // Fetch Profile Pictures
-  useEffect(() => {
-    const fetchImages = async () => {
-      const newPics: Record<string, string> = {};
-      const uniqueChatIds = Array.from(new Set(chats.map(c => c.id)));
-
-      // Process in batches
-      const batchSize = 5;
-      for (let i = 0; i < uniqueChatIds.length; i += batchSize) {
-        const batch = uniqueChatIds.slice(i, i + batchSize);
-        await Promise.all(batch.map(async (chatId) => {
-          if (!profilePics[chatId]) {
-            try {
-              const url = await fetchContactProfilePic(chatId);
-              if (url) {
-                newPics[chatId] = url;
-              }
-            } catch (e) {
-              // Ignore errors for profile pics
-            }
-          }
-        }));
-      }
-
-      if (Object.keys(newPics).length > 0) {
-        setProfilePics(prev => ({ ...prev, ...newPics }));
-      }
-    };
-
-    if (chats.length > 0) {
-      fetchImages();
-    }
-  }, [chats]);
 
   // 3. Load Messages for selected chat
   useEffect(() => {
@@ -307,51 +247,143 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead }) => {
             stage: 'New',
             temperature: 'Cold',
             score: 0,
-            budget: 0,
-            source: 'apify',
-            notes: `Apify Import: ${apifyLead.url}`,
-            last_interaction: 'Never'
+            last_interaction: new Date().toISOString(),
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            user_id: '',
+            source: 'apify'
           }
         } as any;
       }
     }
   }
 
-  // 4. Send Text Message
-  // 4. Send Text Message
-  const handleSendMessage = async (text: string) => {
+  // AI Auto-Response Logic
+  useEffect(() => {
+    if (!activeChat || !messages.length) return;
+
+    const lastMessage = messages[messages.length - 1];
+
+    // 1. Check if last message is from user (not from me)
+    if (lastMessage.fromMe) return;
+
+    // 2. Check if already processed to avoid loops
+    if (processedMessageIds.current.has(lastMessage.id)) return;
+
+    // 3. Check if lead source is 'apify'
+    const isApifyLead = activeChat.lead?.source === 'apify';
+
+    if (isApifyLead) {
+      // Mark as processed immediately
+      processedMessageIds.current.add(lastMessage.id);
+
+      const runAI = async () => {
+        try {
+          // Simulate typing delay
+          await new Promise(resolve => setTimeout(resolve, 1500));
+
+          // Analyze
+          const analysis = await aiService.analyzeConversation(messages, lastMessage.body);
+
+          // Generate Response
+          const response = await aiService.generateResponse(
+            analysis,
+            activeChat.name || 'Client',
+            messages,
+            activeChat.lead?.category || '' // Pass category
+          );
+
+          // Send
+          if (response.text) {
+            await handleSendMessage(response.text);
+          }
+
+          // Handle Actions (e.g. update lead stage)
+          // We can implement stage updates here later if needed
+          if (response.meta?.stage) {
+            console.log(`AI suggests moving lead to stage: ${response.meta.stage}`);
+          }
+
+        } catch (err) {
+          console.error("AI Auto-Response Error:", err);
+        }
+      };
+
+      runAI();
+    }
+  }, [messages, activeChat]);
+
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+
+  const handleSendMedia = (file: File, type: 'image' | 'video' | 'audio' | 'file') => {
+    setPreviewFile(file);
+  };
+
+  const handleSendMessage = async (text: string, file?: File) => {
     if (!selectedChatId) return;
 
-    // Optimistic Update
-    const tempId = 'temp-' + Date.now();
-    const tempMessage: WahaMessage = {
-      id: tempId,
-      timestamp: Date.now() / 1000,
-      from: wahaProfile?.id || 'me',
-      to: selectedChatId,
-      fromMe: true,
-      body: text,
-      hasMedia: false,
-      ack: 0 // Pending
-    };
-
-    setMessages(prev => [...prev, tempMessage]);
     setIsSending(true);
-
     try {
-      const sentMsg = await wahaService.sendText({
-        session: sessionName,
-        chatId: selectedChatId,
-        text: text
-      });
+      let base64 = '';
 
-      // Update with real message
-      setMessages(prev => prev.map(m => m.id === tempId ? sentMsg : m));
+      if (file) {
+        // Convert file to base64 first
+        base64 = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      // Optimistic update
+      const newMessage: WahaMessage = {
+        id: 'temp-' + Date.now(),
+        timestamp: Date.now() / 1000,
+        from: 'me',
+        body: text,
+        fromMe: true,
+        ack: 0,
+        hasMedia: !!file,
+        media: file ? {
+          url: base64,
+          mimetype: file.type,
+          filename: file.name
+        } : undefined,
+        mediaUrl: file ? base64 : undefined,
+        mediaType: file ? (file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'file') : undefined
+      };
+      setMessages(prev => [...prev, newMessage]);
+
+      if (file) {
+        // Send media
+        // Use sendFile instead of sendImage to avoid GOWS engine restrictions
+        await wahaService.sendFile({
+          session: sessionName,
+          chatId: selectedChatId,
+          file: {
+            mimetype: file.type,
+            filename: file.name,
+            url: base64
+          },
+          caption: text
+        });
+      } else {
+        // Send text
+        await wahaService.sendText({
+          session: sessionName,
+          chatId: selectedChatId,
+          text: text
+        });
+      }
+
+      // Refresh messages after short delay
+      setTimeout(() => {
+        // fetchMsgs(); // handled by interval
+      }, 1000);
+
     } catch (error) {
-      console.error("Error sending message:", error);
-      // Mark as error or remove? For now, remove to indicate failure
-      setMessages(prev => prev.filter(m => m.id !== tempId));
-      alert("Failed to send message");
+      console.error('Error sending message:', error);
+      alert('Failed to send message');
     } finally {
       setIsSending(false);
     }
@@ -359,7 +391,51 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead }) => {
 
   // --- RENDERING ---
 
+  // --- ACTIONS ---
+  const handleLogout = async () => {
+    try {
+      await wahaService.logoutSession(sessionName);
+      // Status update will be handled by polling/websocket
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+
+  const handleRestart = async () => {
+    try {
+      await wahaService.startSession(sessionName);
+    } catch (error) {
+      console.error('Error restarting session:', error);
+    }
+  };
+
   // Connection Screen (QR Code)
+  const handleUpdateProfile = async (data: { name?: string; status?: string; picture?: File }) => {
+    try {
+      if (data.name) {
+        await wahaService.setProfileName(sessionName, data.name);
+        setWahaProfile((prev: any) => ({ ...prev, pushName: data.name }));
+      }
+      if (data.status) {
+        await wahaService.setProfileStatus(sessionName, data.status);
+        setWahaProfile((prev: any) => ({ ...prev, status: data.status }));
+      }
+      if (data.picture) {
+        await wahaService.setProfilePicture(sessionName, data.picture);
+        // Refresh profile to get new picture URL
+        const profile = await wahaService.getProfile(sessionName);
+        setWahaProfile(profile);
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      throw error;
+    }
+  };
+
+  if (isLoading) {
+    return <ChatLoading />;
+  }
+
   if (status === 'SCAN_QR_CODE' && qrCodeUrl) {
     return (
       <div className="flex flex-col h-full items-center justify-center bg-[#0F0F0F] text-zinc-200">
@@ -373,20 +449,16 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead }) => {
   }
 
   if (status === 'STARTING') {
-    return (
-      <div className="flex h-full items-center justify-center bg-[#0F0F0F] text-zinc-500">
-        <Loader2 className="animate-spin mr-2" /> Starting session...
-      </div>
-    );
+    return <ChatLoading />;
   }
 
   // Main Chat Interface
   return (
-    <div className="flex h-full bg-[#0F0F0F] relative overflow-hidden">
+    <div className="flex h-full bg-[#09090b] overflow-hidden">
       {/* Sidebar */}
-      <div className={`${selectedChatId ? 'hidden md:flex' : 'flex'} w-full md:w-96 flex-none h-full border-r border-white/5 flex-col`}>
+      <div className={`${selectedChatId ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col bg-[#09090b]`}>
         <ChatSidebar
-          chats={chatList as any}
+          chats={chatList}
           leads={leads}
           apifyLeads={apifyLeads}
           selectedChatId={selectedChatId}
@@ -394,38 +466,52 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead }) => {
           wahaProfile={wahaProfile}
           profilePics={profilePics}
           connectionStatus={status}
-          onLogout={() => wahaService.logoutSession(sessionName)}
-          onRestart={() => wahaService.startSession(sessionName)}
+          onLogout={handleLogout}
+          onRestart={handleRestart}
+          onUpdateProfile={handleUpdateProfile}
+          onNavigate={onNavigate}
+          isLoading={isLoading || isChatListLoading}
         />
       </div>
 
       {/* Chat Window */}
-      <div className={`${!selectedChatId ? 'hidden md:flex' : 'flex'} flex-1 flex-col min-w-0 bg-[#0F0F0F] h-full relative`}>
-        {selectedChatId && activeChat ? (
-          <ChatWindow
-            activeChat={activeChat}
-            messages={messages}
-            onToggleContactInfo={() => setShowContactInfo(!showContactInfo)}
-            onBack={() => setSelectedChatId(null)}
-            profilePic={profilePics[selectedChatId]}
-            presence={contactPresence}
-            currentUserId={wahaProfile?.id}
-            onSendMessage={handleSendMessage}
-          />
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 bg-[#0F0F0F]">
-            <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mb-4 animate-pulse">
-              <Smartphone size={32} className="text-zinc-400" />
-            </div>
-            <h3 className="text-lg font-medium text-zinc-300 mb-1">{t('chat.welcome_title', 'Welcome to WhatsApp')}</h3>
-            <p className="text-sm max-w-xs text-center">{t('chat.welcome_subtitle', 'Select a chat to start messaging')}</p>
+      {selectedChatId ? (
+        <ChatWindow
+          activeChat={activeChat}
+          messages={messages}
+          onToggleContactInfo={() => setShowContactInfo(!showContactInfo)}
+          onBack={() => setSelectedChatId(null)}
+          profilePic={profilePics[selectedChatId]}
+          presence={contactPresence}
+          currentUserId={wahaProfile?.id}
+          onSendMessage={handleSendMessage}
+          onSendMedia={handleSendMedia}
+        />
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 bg-[#09090b] hidden md:flex">
+          <div className="w-16 h-16 bg-zinc-900/50 rounded-full flex items-center justify-center mb-4">
+            <Smartphone size={32} className="text-zinc-600" />
           </div>
-        )}
-      </div>
+          <h3 className="text-lg font-medium text-zinc-300 mb-1">{t('chat.welcome_title', 'Welcome to WhatsApp')}</h3>
+          <p className="text-sm max-w-xs text-center text-zinc-500">{t('chat.welcome_subtitle', 'Select a chat to start messaging')}</p>
+        </div>
+      )}
+
+      {/* Media Preview Overlay */}
+      {previewFile && (
+        <MediaPreview
+          file={previewFile}
+          onSend={(file, caption) => {
+            handleSendMessage(caption, file);
+            setPreviewFile(null);
+          }}
+          onCancel={() => setPreviewFile(null)}
+        />
+      )}
 
       {/* Contact Info Sidebar (Right) */}
       {showContactInfo && activeChat && (
-        <div className="w-80 border-l border-white/5 bg-[#0F0F0F] hidden xl:block">
+        <div className="w-80 bg-[#09090b] hidden xl:block">
           <ContactInfo
             chat={activeChat}
             onClose={() => setShowContactInfo(false)}

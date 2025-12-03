@@ -7,7 +7,16 @@ export interface WahaSession {
 export interface WahaMe {
     id: string;
     pushName: string;
-    picture?: string; // Added picture optional as it's used in UI
+    picture?: string;
+    status?: string; // About status
+}
+
+export interface WahaProfileStatus {
+    status: string;
+}
+
+export interface WahaProfilePictureRequest {
+    file: Blob;
 }
 
 export interface WahaChat {

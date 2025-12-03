@@ -12,22 +12,22 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
     if (!lead) return null;
 
     return (
-        <div className="w-80 h-full flex flex-col bg-[#0F0F0F] border-l border-white/5 animate-in slide-in-from-right duration-300">
+        <div className="w-80 h-full flex flex-col bg-[#09090b] border-l border-zinc-900 animate-in slide-in-from-right duration-300">
             {/* Header */}
-            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+            <div className="p-6 flex items-center justify-between shrink-0">
                 <h3 className="text-lg font-bold text-zinc-100 tracking-tight">Contact Info</h3>
                 <button
                     onClick={onClose}
-                    className="p-2 hover:bg-white/5 rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors"
+                    className="p-2 hover:bg-zinc-900 rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors"
                 >
                     <X size={18} />
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 pt-0 space-y-8">
                 {/* Profile Section */}
                 <div className="flex flex-col items-center text-center">
-                    <div className="w-24 h-24 rounded-full bg-zinc-900 flex items-center justify-center text-zinc-500 font-bold text-3xl border border-white/5 mb-4">
+                    <div className="w-24 h-24 rounded-full bg-zinc-900 flex items-center justify-center text-zinc-500 font-bold text-3xl mb-4">
                         {lead.avatar_url ? (
                             <img src={lead.avatar_url} alt={lead.name} className="w-full h-full object-cover rounded-full" />
                         ) : (
@@ -39,7 +39,7 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
                 </div>
 
                 {/* AI Score Card - Minimalist */}
-                <div className="bg-zinc-900/50 rounded-xl p-4 border border-white/5">
+                <div className="bg-zinc-900/30 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-3">
                         <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Lead Score</span>
                         <BrainCircuit size={14} className="text-bronze-500" />
@@ -92,7 +92,7 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
                         </div>
                     </div>
 
-                    <div className="h-px bg-white/5"></div>
+                    <div className="h-px bg-zinc-900"></div>
 
                     {/* Status Tags */}
                     <div className="space-y-3">
@@ -116,7 +116,7 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
                         </div>
                     </div>
 
-                    <div className="h-px bg-white/5"></div>
+                    <div className="h-px bg-zinc-900"></div>
 
                     {/* Notes */}
                     <div className="space-y-3">
@@ -127,7 +127,7 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
                             </div>
                             <button className="text-[10px] font-bold text-bronze-500 hover:text-bronze-400 transition-colors uppercase tracking-wide">Edit</button>
                         </div>
-                        <div className="bg-zinc-900/30 rounded-lg p-3 border border-white/5">
+                        <div className="bg-zinc-900/30 rounded-lg p-3">
                             <p className="text-xs text-zinc-400 leading-relaxed italic">
                                 {lead.notes || "No notes added yet."}
                             </p>

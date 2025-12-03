@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Filter, RefreshCw, Trash2, Upload, Download, Plus, X, Check, AlertCircle, FileText, Loader } from 'lucide-react';
+import { Search, Filter, RefreshCw, Trash2, Upload, Download, Plus, X, Check, AlertCircle, FileText, Loader, FileDown as FileDownIcon, Clock as ClockIcon, CheckCircle as CheckCircleIcon, MessageSquare, Terminal } from 'lucide-react';
 import Papa from 'papaparse';
 import { supabase } from '../supabaseClient';
 import { Lead, Source, Stage } from '../types';
@@ -30,6 +30,7 @@ type Props = {
 };
 
 export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
+  console.log('ApifyImports component loaded - Version with ClockIcon');
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
@@ -40,6 +41,37 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [profilePics, setProfilePics] = useState<Record<string, string>>({});
   const [alertModal, setAlertModal] = useState<{ isOpen: boolean; title: string; message: string; type: 'success' | 'error' | 'info' }>({ isOpen: false, title: '', message: '', type: 'info' });
+
+  // Scrape State
+  const [showScrapePanel, setShowScrapePanel] = useState(false);
+  const [scrapeConfig, setScrapeConfig] = useState({
+    searchTerms: [] as string[],
+    location: '',
+    maxResults: 50,
+    language: 'en',
+    skipClosedPlaces: false,
+    scrapeContacts: false,
+    scrapePlaceDetailPage: false,
+    includeWebResults: false,
+    maxReviews: 0
+  });
+  const [currentKeyword, setCurrentKeyword] = useState('');
+  const [logs, setLogs] = useState<{ timestamp: string; type: 'info' | 'error' | 'success' | 'warning'; message: string }[]>([]);
+  const [scrapeStatus, setScrapeStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle');
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to bottom of logs
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
+  const addLog = (message: string, type: 'info' | 'error' | 'success' | 'warning' = 'info') => {
+    setLogs(prev => [...prev, {
+      timestamp: new Date().toLocaleTimeString(),
+      type,
+      message
+    }]);
+  };
 
   // Advanced Filters State
   const [showFilters, setShowFilters] = useState(false);
@@ -363,6 +395,94 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
     });
   };
 
+  const handleAddKeyword = () => {
+    if (currentKeyword.trim() && !scrapeConfig.searchTerms.includes(currentKeyword.trim())) {
+      setScrapeConfig(prev => ({
+        ...prev,
+        searchTerms: [...prev.searchTerms, currentKeyword.trim()]
+      }));
+      setCurrentKeyword('');
+    }
+  };
+
+  const handleRemoveKeyword = (term: string) => {
+    setScrapeConfig(prev => ({
+      ...prev,
+      searchTerms: prev.searchTerms.filter(t => t !== term)
+    }));
+  };
+
+  const handleScrape = async () => {
+    if (scrapeConfig.searchTerms.length === 0 || !scrapeConfig.location) {
+      setAlertModal({
+        isOpen: true,
+        title: 'Missing Information',
+        message: 'Please provide at least one search term and a location.',
+        type: 'error'
+      });
+      return;
+    }
+
+    setLoading(true);
+    setScrapeStatus('running');
+    setLogs([]); // Clear previous logs
+    addLog('Initializing scrape job...', 'info');
+    addLog(`Configuration: ${scrapeConfig.searchTerms.length} keywords, Location: ${scrapeConfig.location}`, 'info');
+
+    try {
+      addLog('Sending request to Apify...', 'info');
+      const response = await fetch('http://localhost:3001/api/apify/scrape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          searchTerms: scrapeConfig.searchTerms,
+          location: scrapeConfig.location,
+          maxResults: scrapeConfig.maxResults,
+          language: scrapeConfig.language,
+          skipClosedPlaces: scrapeConfig.skipClosedPlaces,
+          scrapeContacts: scrapeConfig.scrapeContacts,
+          scrapePlaceDetailPage: scrapeConfig.scrapePlaceDetailPage,
+          includeWebResults: scrapeConfig.includeWebResults,
+          maxReviews: scrapeConfig.maxReviews
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start scrape');
+      }
+
+      addLog(`Scrape completed successfully!`, 'success');
+      addLog(`Found: ${data.totalFound}, Added: ${data.added}, Skipped: ${data.skipped}`, 'success');
+      setScrapeStatus('completed');
+
+      setAlertModal({
+        isOpen: true,
+        title: 'Scrape Finished',
+        message: `Scrape job finished. Found ${data.totalFound} items. Added: ${data.added}, Skipped: ${data.skipped}.`,
+        type: 'success'
+      });
+
+      if (onImport) onImport(); // Refresh list
+
+    } catch (error: any) {
+      console.error('Scrape error:', error);
+      addLog(`Error: ${error.message}`, 'error');
+      setScrapeStatus('error');
+      setAlertModal({
+        isOpen: true,
+        title: 'Scrape Failed',
+        message: error.message || 'An error occurred while starting the scrape job.',
+        type: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCleanInvalid = async () => {
     if (!confirm(t('imports.confirm_delete_invalid'))) return;
 
@@ -575,7 +695,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
               className="p-2 hover:bg-white/5 text-zinc-400 hover:text-zinc-200 rounded-lg border border-transparent hover:border-white/5 transition-all"
               title={t('imports.export_csv')}
             >
-              <FileDown size={16} />
+              <FileDownIcon size={16} />
             </button>
 
             <button
@@ -587,12 +707,14 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
             </button>
 
             <button
-              onClick={() => onImport && onImport()}
-              className="ml-2 px-4 py-2 bg-zinc-100 hover:bg-white text-black rounded-lg transition-all transform hover:scale-105 text-xs font-bold uppercase tracking-wide shadow-[0_0_15px_rgba(255,255,255,0.1)] flex items-center gap-2"
+              onClick={() => setShowScrapePanel(true)}
+              className="px-4 py-2 bg-white hover:bg-zinc-200 text-black rounded-lg transition-colors text-xs font-bold uppercase tracking-wide flex items-center gap-2"
             >
-              <RefreshCw size={14} />
-              <span>{t('imports.sync_apify')}</span>
+              <Plus size={14} />
+              <span>New Scrape</span>
             </button>
+
+
           </div>
         </div>
       </div>
@@ -689,11 +811,11 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                           : 'bg-zinc-800 text-zinc-400 border-zinc-700'
                         }`}>
                         {item.status === 'sent' ? (
-                          <CheckCircle size={12} className="mr-1" />
+                          <CheckCircleIcon size={12} className="mr-1" />
                         ) : item.status === 'error' ? (
                           <AlertCircle size={12} className="mr-1" />
                         ) : (
-                          <Clock size={12} className="mr-1" />
+                          <ClockIcon size={12} className="mr-1" />
                         )}
                         {item.status}
                       </span>
@@ -727,6 +849,226 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
         message={alertModal.message}
         type={alertModal.type}
       />
-    </div >
+
+      {/* Scrape Full Screen Panel */}
+      <AnimatePresence>
+        {showScrapePanel && (
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 bg-[#0B0B0B] flex flex-col md:flex-row md:left-64"
+          >
+            {/* Left Column: Configuration */}
+            <div className="w-full md:w-1/2 border-r border-white/5 flex flex-col h-full bg-[#0B0B0B]">
+              {/* Header */}
+              <div className="h-14 border-b border-white/5 flex items-center justify-between px-6 shrink-0">
+                <h2 className="text-lg font-bold text-zinc-100 tracking-tight">New Scrape Job</h2>
+                <button
+                  onClick={() => setShowScrapePanel(false)}
+                  className="p-2 hover:bg-white/5 rounded-full text-zinc-500 hover:text-zinc-300 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Scrollable Config Area */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+
+                {/* Search Keywords */}
+                <div className="space-y-3">
+                  <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Search Keywords</label>
+                  <div className="space-y-3">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={currentKeyword}
+                        onChange={(e) => setCurrentKeyword(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleAddKeyword()}
+                        placeholder="Type keyword and press Enter..."
+                        className="flex-1 bg-transparent border-b border-zinc-800 text-zinc-200 py-1.5 focus:outline-none focus:border-bronze-500 transition-colors placeholder:text-zinc-700 text-sm"
+                      />
+                      <button
+                        onClick={handleAddKeyword}
+                        className="px-3 py-1.5 text-bronze-500 hover:text-bronze-400 font-medium text-xs uppercase tracking-wide transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+
+                    {/* Chips */}
+                    <div className="flex flex-wrap gap-2">
+                      {scrapeConfig.searchTerms.map((term, index) => (
+                        <span key={index} className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium bg-zinc-900 text-zinc-300 border border-zinc-800">
+                          {term}
+                          <button
+                            onClick={() => handleRemoveKeyword(term)}
+                            className="ml-1.5 text-zinc-500 hover:text-zinc-300 focus:outline-none"
+                          >
+                            <X size={10} />
+                          </button>
+                        </span>
+                      ))}
+                      {scrapeConfig.searchTerms.length === 0 && (
+                        <span className="text-xs text-zinc-600 italic">No keywords added.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Location & Max Results Row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Location</label>
+                    <input
+                      type="text"
+                      value={scrapeConfig.location}
+                      onChange={(e) => setScrapeConfig({ ...scrapeConfig, location: e.target.value })}
+                      placeholder="e.g. New York, USA"
+                      className="w-full bg-transparent border-b border-zinc-800 text-zinc-200 py-1.5 focus:outline-none focus:border-bronze-500 transition-colors placeholder:text-zinc-700 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Max Results</label>
+                    <input
+                      type="number"
+                      value={scrapeConfig.maxResults}
+                      onChange={(e) => setScrapeConfig({ ...scrapeConfig, maxResults: parseInt(e.target.value) || 50 })}
+                      min={1}
+                      max={500}
+                      className="w-full bg-transparent border-b border-zinc-800 text-zinc-200 py-1.5 focus:outline-none focus:border-bronze-500 transition-colors placeholder:text-zinc-700 text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* Advanced Options */}
+                <div className="pt-6 border-t border-white/5 space-y-4">
+                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Advanced Configuration</h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Language */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Language</label>
+                      <select
+                        value={scrapeConfig.language}
+                        onChange={(e) => setScrapeConfig({ ...scrapeConfig, language: e.target.value })}
+                        className="w-full bg-transparent border-b border-zinc-800 text-zinc-200 py-1.5 focus:outline-none focus:border-bronze-500 transition-colors appearance-none cursor-pointer text-sm"
+                      >
+                        <option value="en" className="bg-zinc-900">English</option>
+                        <option value="pt-BR" className="bg-zinc-900">Portuguese (Brazil)</option>
+                        <option value="pt-PT" className="bg-zinc-900">Portuguese (Portugal)</option>
+                        <option value="es" className="bg-zinc-900">Spanish</option>
+                        <option value="fr" className="bg-zinc-900">French</option>
+                        <option value="de" className="bg-zinc-900">German</option>
+                      </select>
+                    </div>
+
+                    {/* Max Reviews */}
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Max Reviews</label>
+                      <input
+                        type="number"
+                        value={scrapeConfig.maxReviews}
+                        onChange={(e) => setScrapeConfig({ ...scrapeConfig, maxReviews: parseInt(e.target.value) || 0 })}
+                        min={0}
+                        className="w-full bg-transparent border-b border-zinc-800 text-zinc-200 py-1.5 focus:outline-none focus:border-bronze-500 transition-colors placeholder:text-zinc-700 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Toggles Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                    {[
+                      { label: 'Skip Closed Places', key: 'skipClosedPlaces' },
+                      { label: 'Scrape Contacts', key: 'scrapeContacts' },
+                      { label: 'Scrape Place Detail', key: 'scrapePlaceDetailPage' },
+                      { label: 'Include Web Results', key: 'includeWebResults' },
+                    ].map((toggle) => (
+                      <label key={toggle.key} className="flex items-center gap-3 cursor-pointer group p-2 rounded-lg hover:bg-white/5 transition-colors border border-transparent hover:border-white/5">
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${(scrapeConfig as any)[toggle.key]
+                          ? 'bg-bronze-500 border-bronze-500'
+                          : 'bg-transparent border-zinc-700 group-hover:border-zinc-500'
+                          }`}>
+                          {(scrapeConfig as any)[toggle.key] && <CheckCircleIcon size={10} className="text-black" />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={(scrapeConfig as any)[toggle.key]}
+                          onChange={(e) => setScrapeConfig({ ...scrapeConfig, [toggle.key]: e.target.checked })}
+                          className="hidden"
+                        />
+                        <span className="text-xs text-zinc-400 group-hover:text-zinc-200 transition-colors">{toggle.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="p-6 border-t border-white/5 flex items-center justify-end gap-3 bg-zinc-900/30 shrink-0">
+                <button
+                  onClick={() => setShowScrapePanel(false)}
+                  className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleScrape}
+                  disabled={loading || scrapeStatus === 'running'}
+                  className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-all flex items-center gap-2 ${loading || scrapeStatus === 'running'
+                    ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+                    : 'bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/10'
+                    }`}
+                >
+                  {loading ? <Loader className="animate-spin" size={14} /> : <Download size={14} />}
+                  {loading ? 'Scraping...' : 'Start Scrape'}
+                </button>
+              </div>
+            </div>
+
+            {/* Right Column: Logs & Progress */}
+            <div className="w-full md:w-1/2 bg-black/50 flex flex-col h-full relative overflow-hidden border-t md:border-t-0 md:border-l border-white/5">
+              {/* Background Pattern */}
+              <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, #333 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+
+              <div className="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-zinc-900/30 backdrop-blur-sm z-10 shrink-0">
+                <h2 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
+                  <div className={`w-1.5 h-1.5 rounded-full ${scrapeStatus === 'running' ? 'bg-green-500 animate-pulse' : 'bg-zinc-600'}`}></div>
+                  Live Logs
+                </h2>
+                {scrapeStatus === 'running' && <span className="text-[10px] text-bronze-500 font-mono animate-pulse">Processing...</span>}
+              </div>
+
+              <div className="flex-1 p-6 overflow-y-auto custom-scrollbar z-10">
+                <div className="font-mono text-[10px] md:text-xs space-y-1.5">
+                  {logs.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-zinc-600 space-y-3 opacity-50">
+                      <div className="w-12 h-12 rounded-full border-2 border-dashed border-zinc-700 flex items-center justify-center">
+                        <Terminal size={20} />
+                      </div>
+                      <p>Waiting for job to start...</p>
+                    </div>
+                  ) : (
+                    logs.map((log, i) => (
+                      <div key={i} className={`flex gap-2 p-1.5 rounded hover:bg-white/5 transition-colors border-l-2 ${log.type === 'error' ? 'border-red-500 bg-red-500/5 text-red-400' :
+                        log.type === 'success' ? 'border-emerald-500 bg-emerald-500/5 text-emerald-400' :
+                          log.type === 'warning' ? 'border-yellow-500 bg-yellow-500/5 text-yellow-400' :
+                            'border-zinc-700 text-zinc-400'
+                        }`}>
+                        <span className="text-zinc-600 shrink-0 select-none">[{log.timestamp}]</span>
+                        <span className="break-all">{log.message}</span>
+                      </div>
+                    ))
+                  )}
+                  <div ref={logsEndRef} />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };

@@ -34,7 +34,8 @@
         "waha_api": "WAHA API",
         "n8n_workflow": "n8n Workflow",
         "online": "Online",
-        "active": "Active"
+        "active": "Active",
+        "system_settings": "System Settings"
     },
     "header": {
         "overview": "Overview",
@@ -246,6 +247,13 @@
         "integrations": {
             "header": "Integrations",
             "subheader": "Manage your connected services."
-        }
+        },
+        "system": {
+            "title": "System Settings",
+            "description": "Configure global system parameters and API connections.",
+            "header": "System Configuration",
+            "subheader": "Manage global system settings and API connections."
+        },
+        "system_updated": "System settings updated successfully"
     }
 }

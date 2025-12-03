@@ -10,11 +10,20 @@ interface DashboardProps {
   leads: Lead[];
   chartData: any[];
   activity: ActivityItem[];
+  isLoading?: boolean;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ leads, chartData, activity }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ leads, chartData, activity, isLoading }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'finances' | 'leads'>('finances');
+
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-zinc-800 border-t-zinc-100 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 h-full flex flex-col overflow-hidden">

@@ -1,26 +1,39 @@
 // @ts-nocheck
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AutomationFlow } from '../types';
-import { Play, Pause, Workflow, Plus, Calendar, Activity, MoreHorizontal, Trash2, Edit2 } from 'lucide-react';
+import { AutomationFlow, ApifyLead } from '../types';
+import { Play, Pause, Workflow, Plus, Calendar, Activity, MoreHorizontal, Trash2, Edit2, Send, X, AlertCircle, CheckCircle } from 'lucide-react';
+import { fetchApifyLeads, updateApifyLeadStatus, sendMessage, getOrCreateApifyBlastWorkflow } from '../services/supabaseService';
 
 interface AutomationProps {
   flows: AutomationFlow[];
   isAdmin: boolean;
+  isLoading?: boolean;
 }
 
-export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin }) => {
+export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin, isLoading }) => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-zinc-800 border-t-zinc-100 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 h-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-end justify-between mb-8 pb-6 border-b border-white/5">
+      <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 pb-6 border-b border-white/5 gap-4">
         <div>
           <h2 className="text-3xl font-bold text-zinc-100 tracking-tight">{t('automation.title')}</h2>
           <p className="text-zinc-500 text-sm mt-2 font-medium">{t('automation.subtitle')}</p>
         </div>
         {isAdmin && (
-          <button className="group flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-white text-black rounded-lg text-sm font-medium transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)]">
+          <button className="group flex items-center gap-2 px-4 py-2 bg-zinc-100 hover:bg-white text-black rounded-lg text-sm font-medium transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_25px_rgba(255,255,255,0.2)] w-full md:w-auto justify-center">
             <Plus size={16} className="text-black/70 group-hover:text-black transition-colors" />
             <span>{t('automation.new_workflow')}</span>
           </button>
@@ -33,17 +46,38 @@ export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin }) => {
 
           {/* Create Workflow Card */}
           {isAdmin && (
-            <button className="group relative flex flex-col items-center justify-center p-6 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10 transition-all min-h-[180px] text-center gap-4 overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/0 to-zinc-800/0 group-hover:from-zinc-800/10 group-hover:to-transparent transition-all duration-500" />
+            <>
+              <button className="group relative flex flex-col items-center justify-center p-6 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/10 transition-all min-h-[180px] text-center gap-4 overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-zinc-800/0 to-zinc-800/0 group-hover:from-zinc-800/10 group-hover:to-transparent transition-all duration-500" />
 
-              <div className="w-12 h-12 rounded-full bg-zinc-900 border border-white/5 flex items-center justify-center group-hover:scale-110 group-hover:border-white/10 transition-all shadow-lg">
-                <Plus size={20} className="text-zinc-500 group-hover:text-zinc-200 transition-colors" />
-              </div>
-              <div className="relative z-10">
-                <h3 className="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors">{t('automation.create_workflow')}</h3>
-                <p className="text-xs text-zinc-600 mt-1 max-w-[140px] mx-auto group-hover:text-zinc-500 transition-colors">{t('automation.connect_n8n')}</p>
-              </div>
-            </button>
+                <div className="w-12 h-12 rounded-full bg-zinc-900 border border-white/5 flex items-center justify-center group-hover:scale-110 group-hover:border-white/10 transition-all shadow-lg">
+                  <Plus size={20} className="text-zinc-500 group-hover:text-zinc-200 transition-colors" />
+                </div>
+                <div className="relative z-10">
+                  <h3 className="text-sm font-bold text-zinc-300 group-hover:text-white transition-colors">{t('automation.create_workflow')}</h3>
+                  <p className="text-xs text-zinc-600 mt-1 max-w-[140px] mx-auto group-hover:text-zinc-500 transition-colors">{t('automation.connect_n8n')}</p>
+                </div>
+              </button>
+
+              {/* Apify Blast Card */}
+              <button
+                onClick={async () => {
+                  await getOrCreateApifyBlastWorkflow();
+                  navigate('/automation/apifyblast');
+                }}
+                className="group relative flex flex-col items-center justify-center p-6 rounded-xl border border-white/5 bg-emerald-500/[0.02] hover:bg-emerald-500/[0.05] hover:border-emerald-500/20 transition-all min-h-[180px] text-center gap-4 overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/0 to-emerald-500/0 group-hover:from-emerald-500/5 group-hover:to-transparent transition-all duration-500" />
+
+                <div className="w-12 h-12 rounded-full bg-zinc-900 border border-emerald-500/20 flex items-center justify-center group-hover:scale-110 group-hover:border-emerald-500/40 transition-all shadow-lg shadow-emerald-500/5">
+                  <Send size={20} className="text-emerald-500/70 group-hover:text-emerald-400 transition-colors" />
+                </div>
+                <div className="relative z-10">
+                  <h3 className="text-sm font-bold text-emerald-100/80 group-hover:text-emerald-100 transition-colors">Apify Blast</h3>
+                  <p className="text-xs text-emerald-500/40 mt-1 max-w-[140px] mx-auto group-hover:text-emerald-500/60 transition-colors">Send bulk messages to imported leads</p>
+                </div>
+              </button>
+            </>
           )}
 
           {/* Workflow Cards */}
@@ -84,7 +118,7 @@ export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin }) => {
 
               {/* Hover Actions */}
               {isAdmin && (
-                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                <div className="absolute top-4 right-4 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity flex items-center gap-1">
                   <button className="p-1.5 rounded-md hover:bg-white/10 text-zinc-500 hover:text-zinc-200 transition-colors">
                     <Edit2 size={12} />
                   </button>
@@ -96,20 +130,17 @@ export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin }) => {
             </div>
           ))}
 
-          {/* Empty State (if no flows, but we always show Create Card so this might be redundant if we want grid always. 
-              But if flows is empty, we just show Create Card. 
-              If we wanted a dedicated empty state area, we could do that, but the grid with Create Card is cleaner.) 
-          */}
+          {/* Empty State */}
+          {flows.length === 0 && (
+            <div className="mt-12 flex flex-col items-center justify-center text-center opacity-40">
+              <Workflow size={48} className="text-zinc-700 mb-4" />
+              <p className="text-zinc-500 text-sm">{t('automation.no_workflows')}</p>
+            </div>
+          )}
         </div>
-
-        {flows.length === 0 && (
-          <div className="mt-12 flex flex-col items-center justify-center text-center opacity-40">
-            <Workflow size={48} className="text-zinc-700 mb-4" />
-            <p className="text-zinc-500 text-sm">{t('automation.no_workflows')}</p>
-          </div>
-        )}
       </div>
+
+
     </div>
   );
 };
-

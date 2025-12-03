@@ -57,6 +57,83 @@ export type Database = {
                 }
                 Relationships: []
             }
+            blast_logs: {
+                Row: {
+                    blast_run_id: string | null
+                    created_at: string
+                    error_message: string | null
+                    id: string
+                    lead_id: number | null
+                    lead_phone: string | null
+                    status: string | null
+                }
+                Insert: {
+                    blast_run_id?: string | null
+                    created_at?: string
+                    error_message?: string | null
+                    id?: string
+                    lead_id?: number | null
+                    lead_phone?: string | null
+                    status?: string | null
+                }
+                Update: {
+                    blast_run_id?: string | null
+                    created_at?: string
+                    error_message?: string | null
+                    id?: string
+                    lead_id?: number | null
+                    lead_phone?: string | null
+                    status?: string | null
+                }
+                Relationships: [
+                    {
+                        foreignKeyName: "blast_logs_blast_run_id_fkey"
+                        columns: ["blast_run_id"]
+                        isOneToOne: false
+                        referencedRelation: "blast_runs"
+                        referencedColumns: ["id"]
+                    }
+                ]
+            }
+            blast_runs: {
+                Row: {
+                    batch_size: number | null
+                    created_at: string
+                    failed_count: number | null
+                    filters: Json | null
+                    id: string
+                    interval_seconds: number | null
+                    message_template: string | null
+                    status: string | null
+                    success_count: number | null
+                    total_leads: number | null
+                }
+                Insert: {
+                    batch_size?: number | null
+                    created_at?: string
+                    failed_count?: number | null
+                    filters?: Json | null
+                    id?: string
+                    interval_seconds?: number | null
+                    message_template?: string | null
+                    status?: string | null
+                    success_count?: number | null
+                    total_leads?: number | null
+                }
+                Update: {
+                    batch_size?: number | null
+                    created_at?: string
+                    failed_count?: number | null
+                    filters?: Json | null
+                    id?: string
+                    interval_seconds?: number | null
+                    message_template?: string | null
+                    status?: string | null
+                    success_count?: number | null
+                    total_leads?: number | null
+                }
+                Relationships: []
+            }
             automations: {
                 Row: {
                     description: string | null
@@ -254,6 +331,27 @@ export type Database = {
                     session?: string | null
                     unread_count?: number | null
                     updated_at?: string | null
+                }
+                Relationships: []
+            }
+            templates: {
+                Row: {
+                    content: string
+                    created_at: string
+                    id: string
+                    name: string
+                }
+                Insert: {
+                    content: string
+                    created_at?: string
+                    id?: string
+                    name: string
+                }
+                Update: {
+                    content?: string
+                    created_at?: string
+                    id?: string
+                    name?: string
                 }
                 Relationships: []
             }

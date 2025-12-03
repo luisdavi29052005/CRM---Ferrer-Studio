@@ -1,7 +1,8 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate, BrowserRouter as Router } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Users, MessageSquare, Database, Zap, Bell, ChevronDown, Activity, ArrowRight, Lock, Mail, LogOut, Settings as SettingsIcon, User } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Database, Zap, Bell, ChevronDown, Activity, ArrowRight, Lock, Mail, LogOut, Settings as SettingsIcon, User, Menu, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Dashboard } from './components/Dashboard';
 import { Leads } from './components/Leads';
@@ -11,8 +12,12 @@ import { Automation } from './components/Automation';
 import { UserManagement } from './components/UserManagement';
 import { Profile } from './components/Profile';
 import { Settings } from './components/Settings';
+import { SystemSettings } from './components/SystemSettings';
+import { ApifyBlastPage } from './components/ApifyBlastPage';
+
 import { Lead, ApifyLead, WahaChat, AutomationFlow, ActivityItem } from './types';
-import { fetchLeads, fetchApifyLeads, fetchWahaChats, fetchAutomations, authActions, fetchChartData, checkWahaStatus, updateProfile, fetchRecentActivity } from './services/supabaseService';
+import { fetchLeads, fetchApifyLeads, fetchWahaChats, fetchAutomations, authActions, fetchChartData, checkWahaStatus, updateProfile, fetchRecentActivity, fetchContactProfilePic, updateLead } from './services/supabaseService';
+import { wahaService } from './services/wahaService';
 import { supabase } from './supabaseClient';
 import { GridBackground } from './components/GridBackground';
 
@@ -202,9 +207,18 @@ const App = () => {
   const [authChecking, setAuthChecking] = useState(true);
   const [isPending, setIsPending] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [activeView, setActiveView] = useState<View>('dashboard');
+  const navigate = useNavigate();
+  const location = useLocation();
   const [selectedLeadForChat, setSelectedLeadForChat] = useState<string | undefined>(undefined);
   const [selectedLead, setSelectedLead] = useState<Lead | undefined>(undefined);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  // Apify Pagination State
+  const [apifyPage, setApifyPage] = useState(0);
+  const [apifyHasMore, setApifyHasMore] = useState(true);
+  const [apifyLoadingMore, setApifyLoadingMore] = useState(false);
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [apifyLeads, setApifyLeads] = useState<ApifyLead[]>([]);
@@ -213,14 +227,30 @@ const App = () => {
   const [chartData, setChartData] = useState<any[]>([]);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [wahaStatus, setWahaStatus] = useState<'WORKING' | 'FAILED' | 'STOPPED' | 'STARTING' | 'UNKNOWN'>('UNKNOWN');
 
   const [userAvatar, setUserAvatar] = useState<string>('https://ui-avatars.com/api/?name=User&background=random');
   const [userName, setUserName] = useState<string>('User');
   const [userEmail, setUserEmail] = useState<string>('');
+  const [userId, setUserId] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('User');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const checkUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const profile = await authActions.getCurrentProfile(session.user.id);
+      if (profile) {
+        setUserName(profile.full_name || session.user.email?.split('@')[0] || 'User');
+        setUserAvatar(profile.avatar_url || session.user.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${profile.full_name}&background=random`);
+        setUserRole(profile.role === 'admin' ? 'Administrator' : 'Team Member');
+        setUserId(profile.id);
+      }
+    }
+  };
 
   // Track if we've already initialized auth - prevents repeated checks
   const authInitialized = useRef(false);
@@ -262,6 +292,7 @@ const App = () => {
           else if (email) setUserName(email.split('@')[0]);
 
           setUserEmail(email);
+          setUserId(session.user.id);
 
           const profile = await authActions.getCurrentProfile(session.user.id);
 
@@ -328,29 +359,105 @@ const App = () => {
       }
     });
 
+
     return () => {
       subscription.unsubscribe();
     };
   }, []);
 
 
+
   useEffect(() => {
     if (isAuthenticated) {
       const loadData = async () => {
-        const [fetchedLeads, fetchedApify, fetchedChats, fetchedAutos, fetchedChart, fetchedActivity] = await Promise.all([
-          fetchLeads(),
-          fetchApifyLeads(),
-          fetchWahaChats(),
-          fetchAutomations(),
-          fetchChartData(),
-          fetchRecentActivity()
-        ]);
-        setLeads(fetchedLeads);
-        setApifyLeads(fetchedApify);
-        setWahaChats(fetchedChats);
-        setAutomations(fetchedAutos);
-        setChartData(fetchedChart || []);
-        setActivity(fetchedActivity);
+        setIsLoadingData(true);
+        try {
+          const [fetchedLeads, fetchedApify, fetchedChats, fetchedAutos, fetchedChart, fetchedActivity, wahaLiveChats] = await Promise.all([
+            fetchLeads(),
+            fetchApifyLeads(0), // Fetch first page only
+            fetchWahaChats(),
+            fetchAutomations(),
+            fetchChartData(),
+            fetchRecentActivity(),
+            wahaService.getChats('default').catch(() => [])
+          ]);
+
+          // --- Chat Merging Logic (Moved from Chat.tsx) ---
+          const mappedSupabaseChats: WahaChat[] = (fetchedChats || []).map(c => ({
+            id: c.chatID,
+            name: c.push_name,
+            push_name: c.push_name,
+            timestamp: c.last_timestamp / 1000,
+            unreadCount: c.unreadCount,
+            isGroup: c.chatID.endsWith('@g.us'),
+            lastMessage: {
+              content: c.last_text,
+              timestamp: c.last_timestamp / 1000
+            },
+            last_text: c.last_text,
+            last_timestamp: c.last_timestamp,
+            status: 'read'
+          }));
+
+          const chatMap = new Map<string, WahaChat>();
+          mappedSupabaseChats.forEach(c => chatMap.set(c.id, c));
+          (wahaLiveChats || []).forEach((c: any) => chatMap.set(c.id, { ...chatMap.get(c.id), ...c }));
+
+          const mergedChats = Array.from(chatMap.values());
+
+          // Enrich with Lead data
+          const enrichedChats = mergedChats.map(chat => {
+            const lead = (fetchedLeads || []).find(l => l.chat_id === chat.id || l.phone === chat.id.replace('@c.us', ''));
+            return { ...chat, lead };
+          });
+
+          // Add Virtual Chats
+          (fetchedLeads || []).forEach(lead => {
+            const chatId = lead.chat_id || `${lead.phone}@c.us`;
+            if (!chatMap.has(chatId)) {
+              const alreadyExists = enrichedChats.some(c => c.id === chatId);
+              if (!alreadyExists) {
+                enrichedChats.push({
+                  id: chatId,
+                  name: lead.name,
+                  push_name: lead.name,
+                  timestamp: new Date(lead.last_interaction || Date.now()).getTime() / 1000,
+                  unreadCount: 0,
+                  isGroup: false,
+                  lead: lead,
+                  last_text: 'Start a conversation',
+                  status: 'read'
+                } as WahaChat);
+              }
+            }
+          });
+
+          enrichedChats.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+          // ------------------------------------------------
+
+          setLeads(fetchedLeads || []);
+          if ((fetchedLeads || []).length < 50) {
+            setHasMore(false);
+          } else {
+            setHasMore(true);
+          }
+
+          setApifyLeads(fetchedApify || []);
+          if ((fetchedApify || []).length < 50) {
+            setApifyHasMore(false);
+          } else {
+            setApifyHasMore(true);
+          }
+
+          setWahaChats(enrichedChats);
+          setAutomations(fetchedAutos || []);
+          setChartData(fetchedChart || []);
+          setActivity(fetchedActivity || []);
+        } catch (error) {
+          console.error("Error loading data:", error);
+        } finally {
+          setIsLoadingData(false);
+        }
       };
       loadData();
 
@@ -404,27 +511,108 @@ const App = () => {
     }
   }, [isAuthenticated]);
 
+  // Prefetch Profile Pictures
+  const [profilePics, setProfilePics] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const fetchImages = async () => {
+      const newPics: Record<string, string> = {};
+      const uniqueChatIds = Array.from(new Set(wahaChats.map(c => c.id)));
+
+      leads.forEach(l => {
+        if (l.chat_id) uniqueChatIds.push(l.chat_id);
+        else if (l.phone) uniqueChatIds.push(`${l.phone}@c.us`);
+      });
+
+      const uniqueIds = Array.from(new Set(uniqueChatIds));
+
+      const batchSize = 5;
+      for (let i = 0; i < uniqueIds.length; i += batchSize) {
+        const batch = uniqueIds.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (chatId) => {
+          if (!profilePics[chatId]) {
+            try {
+              const url = await fetchContactProfilePic(chatId);
+              if (url) {
+                newPics[chatId] = url;
+              }
+            } catch (e) { }
+          }
+        }));
+      }
+
+      if (Object.keys(newPics).length > 0) {
+        setProfilePics(prev => ({ ...prev, ...newPics }));
+      }
+    };
+
+    if (wahaChats.length > 0 || leads.length > 0) {
+      fetchImages();
+    }
+  }, [wahaChats, leads]);
+
   const handleOpenChat = (lead: Lead) => {
     setSelectedLeadForChat(lead.chat_id);
     setSelectedLead(lead);
-    setActiveView('chat');
+    navigate('/chat');
   };
 
-  const SidebarItem = ({ view, icon: Icon, label, activeView, setActiveView }: any) => (
-    <button
-      onClick={() => setActiveView(view)}
-      className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${activeView === view
-        ? 'text-zinc-100'
-        : 'text-zinc-500 hover:text-zinc-300'
-        }`}
-    >
-      {activeView === view && (
-        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)]"></div>
-      )}
-      <Icon strokeWidth={1.5} size={18} className={`transition-transform duration-300 ${activeView === view ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
-      <span className="tracking-wide">{label}</span>
-    </button>
-  );
+  const handleLeadUpdate = async (leadId: string, newStage: Stage) => {
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, stage: newStage } : l));
+    try {
+      await updateLead(leadId, { stage: newStage });
+    } catch (error) {
+      console.error("Failed to update lead stage", error);
+    }
+  };
+
+  const loadMoreLeads = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    const nextPage = page + 1;
+    const newLeads = await fetchLeads(nextPage);
+    if (newLeads.length < 50) {
+      setHasMore(false);
+    }
+    setLeads(prev => [...prev, ...newLeads]);
+    setPage(nextPage);
+    setLoadingMore(false);
+  };
+
+  const loadMoreApifyLeads = async () => {
+    if (apifyLoadingMore || !apifyHasMore) return;
+    setApifyLoadingMore(true);
+    const nextPage = apifyPage + 1;
+    const newItems = await fetchApifyLeads(nextPage);
+    if (newItems.length < 50) {
+      setApifyHasMore(false);
+    }
+    setApifyLeads(prev => [...prev, ...newItems]);
+    setApifyPage(nextPage);
+    setApifyLoadingMore(false);
+  };
+
+  const SidebarItem = ({ path, icon: Icon, label }: any) => {
+    const isActive = location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
+    return (
+      <button
+        onClick={() => {
+          navigate(path);
+          setIsSidebarOpen(false);
+        }}
+        className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${isActive
+          ? 'text-zinc-100'
+          : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+      >
+        {isActive && (
+          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)]"></div>
+        )}
+        <Icon strokeWidth={1.5} size={18} className={`transition-transform duration-300 ${isActive ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
+        <span className="tracking-wide whitespace-nowrap">{label}</span>
+      </button>
+    );
+  };
 
   if (authChecking) {
     return (
@@ -456,124 +644,89 @@ const App = () => {
   }
 
   return (
-    <>
-      <AnimatePresence mode="wait">
-        {!isAuthenticated ? (
-          <LoginScreen key="login" onLogin={() => setIsAuthenticated(true)} />
-        ) : (
-          <motion.div
-            key="app"
-            initial={{ opacity: 0, filter: 'blur(20px)' }}
-            animate={{ opacity: 1, filter: 'blur(0px)' }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, ease: "easeOut" }}
-            className="bg-[#050505] h-screen w-screen flex text-zinc-200 font-sans selection:bg-zinc-800 overflow-hidden relative"
-          >
-            <GridBackground />
+    <AnimatePresence mode="wait">
+      <Routes>
+        <Route path="/login" element={
+          !isAuthenticated ? (
+            <LoginScreen onLogin={() => setIsAuthenticated(true)} />
+          ) : (
+            <Navigate to="/" replace />
+          )
+        } />
 
-            {/* Minimalist Dark Sidebar */}
-            <aside className="w-64 h-full flex flex-col z-20 bg-black/40 border-r border-white/5 relative backdrop-blur-xl">
-              <div className="p-6">
-                {/* Premium Logo Area */}
-                <div className="flex items-center gap-3 mb-12 pl-2">
-                  <div className="flex flex-col">
-                    <span className="font-bold tracking-tighter text-zinc-100 text-lg leading-none">FERRER</span>
-                    <span className="text-[10px] text-zinc-500 font-medium tracking-[0.3em] uppercase mt-1">Studio</span>
+        <Route path="/*" element={
+          isAuthenticated ? (
+            <motion.div
+              key="app"
+              initial={{ opacity: 0, filter: 'blur(20px)' }}
+              animate={{ opacity: 1, filter: 'blur(0px)' }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="bg-[#050505] h-screen w-screen flex text-zinc-200 font-sans selection:bg-zinc-800 overflow-hidden relative"
+            >
+              <GridBackground />
+
+              {/* Mobile Sidebar Overlay */}
+              <AnimatePresence>
+                {isSidebarOpen && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsSidebarOpen(false)}
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 md:hidden"
+                  />
+                )}
+              </AnimatePresence>
+
+              {/* Minimalist Dark Sidebar */}
+              <aside className={`
+                fixed md:static inset-y-0 left-0 z-40 w-64 h-full flex flex-col bg-black/95 md:bg-black/40 border-r border-white/5 backdrop-blur-xl transition-transform duration-300 ease-in-out
+                ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+              `}>
+                <div className="p-6">
+                  {/* Premium Logo Area */}
+                  <div className="flex items-center justify-between mb-12 pl-2">
+                    <div className="flex flex-col">
+                      <span className="font-bold tracking-tighter text-zinc-100 text-lg leading-none">FERRER</span>
+                      <span className="text-[10px] text-zinc-500 font-medium tracking-[0.3em] uppercase mt-1">Studio</span>
+                    </div>
+                    <button
+                      onClick={() => setIsSidebarOpen(false)}
+                      className="md:hidden p-1 text-zinc-500 hover:text-zinc-300"
+                    >
+                      <X size={20} />
+                    </button>
                   </div>
+
+                  <nav className="space-y-1">
+                    <SidebarItem path="/dashboard" icon={LayoutDashboard} label={t('sidebar.dashboard')} />
+                    <SidebarItem path="/leads" icon={Users} label={t('sidebar.leads')} />
+                    <SidebarItem path="/chat" icon={MessageSquare} label={t('sidebar.chat')} />
+                    <SidebarItem path="/apify" icon={Database} label={t('sidebar.imports')} />
+                    <SidebarItem path="/automation" icon={Zap} label={t('sidebar.automation')} />
+
+                    {isAdmin && (
+                      <>
+                        <div className="my-8 border-t border-white/5 mx-4"></div>
+                        <SidebarItem path="/users" icon={Users} label={t('sidebar.team')} />
+                        <SidebarItem path="/system-settings" icon={SettingsIcon} label={t('sidebar.system_settings') || 'System Settings'} />
+                      </>
+                    )}
+                  </nav>
                 </div>
 
-                <nav className="space-y-1">
-                  <SidebarItem view="dashboard" icon={LayoutDashboard} label={t('sidebar.dashboard')} activeView={activeView} setActiveView={setActiveView} />
-                  <SidebarItem view="leads" icon={Users} label={t('sidebar.leads')} activeView={activeView} setActiveView={setActiveView} />
-                  <SidebarItem view="chat" icon={MessageSquare} label={t('sidebar.chat')} activeView={activeView} setActiveView={setActiveView} />
-                  <SidebarItem view="apify" icon={Database} label={t('sidebar.imports')} activeView={activeView} setActiveView={setActiveView} />
-                  <SidebarItem view="automation" icon={Zap} label={t('sidebar.automation')} activeView={activeView} setActiveView={setActiveView} />
-
-                  {isAdmin && (
-                    <>
-                      <div className="my-8 border-t border-white/5 mx-4"></div>
-                      <SidebarItem view="users" icon={Users} label={t('sidebar.team')} activeView={activeView} setActiveView={setActiveView} />
-                    </>
-                  )}
-                </nav>
-              </div>
-
-              <div className="mt-auto p-6">
-                <div className="px-4 py-4">
-                  <div className="flex items-center gap-2 mb-4 opacity-40">
-                    <Activity size={12} className="text-zinc-500" />
-                    <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">{t('sidebar.system_status')}</p>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between text-xs group">
-                      <span className="text-zinc-500 font-medium group-hover:text-zinc-300 transition-colors">{t('sidebar.waha_api')}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500/50 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                        </span>
-                        <span className="font-medium text-zinc-400 text-[10px] uppercase tracking-wide">{t('sidebar.online')}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs group">
-                      <span className="text-zinc-500 font-medium group-hover:text-zinc-300 transition-colors">{t('sidebar.n8n_workflow')}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                        </span>
-                        <span className="font-medium text-zinc-400 text-[10px] uppercase tracking-wide">{t('sidebar.active')}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-xs group">
-                      <span className="text-zinc-500 font-medium group-hover:text-zinc-300 transition-colors">WhatsApp</span>
-                      <div className="flex items-center gap-2">
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${wahaStatus === 'WORKING' ? 'bg-emerald-500/50' : 'bg-red-500/50'}`}></span>
-                          <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${wahaStatus === 'WORKING' ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                        </span>
-                        <span className="font-medium text-zinc-400 text-[10px] uppercase tracking-wide">
-                          {wahaStatus === 'WORKING' ? t('sidebar.online') : 'Offline'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </aside>
-
-            {/* Main Content */}
-            <main className="flex-1 flex flex-col min-w-0 h-full relative z-10">
-
-              {/* Minimalist Header */}
-              <header className="h-14 border-b border-white/5 sticky top-0 z-10 px-6 flex items-center justify-between backdrop-blur-md bg-black/40 transition-all duration-300">
-                <div className="flex items-center text-xs font-medium tracking-wide">
-                  <span className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-default">{t('header.overview')}</span>
-                  <span className="mx-2 text-zinc-700">/</span>
-                  <span className="text-zinc-200 capitalize">{activeView}</span>
-                </div>
-
-                <div className="flex items-center gap-6">
-                  {/* WAHA Status Indicator */}
-                  {/* WAHA Status Indicator Removed */}
-
-                  <div className="h-4 w-px bg-white/5"></div>
-
-                  <button className="relative group p-1">
-                    <Bell strokeWidth={1.5} size={16} className="text-zinc-500 group-hover:text-zinc-300 transition-colors" />
-                    <span className="absolute top-1 right-0.5 w-1.5 h-1.5 bg-bronze-500 rounded-full border-2 border-black"></span>
-                  </button>
-
-                  {/* Premium Mini-Profile */}
+                <div className="mt-auto p-6">
                   <div className="relative">
                     <button
                       onClick={() => setIsProfileOpen(!isProfileOpen)}
-                      className="flex items-center gap-3 pl-2 pr-1 py-1 rounded-full hover:bg-white/5 transition-all duration-200 group border border-transparent hover:border-white/5"
+                      className="w-full flex items-center gap-3 pl-2 pr-1 py-1 rounded-full hover:bg-white/5 transition-all duration-200 group border border-transparent hover:border-white/5"
                     >
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 ring-1 ring-white/10 group-hover:ring-white/20 transition-all overflow-hidden shadow-lg">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 ring-1 ring-white/10 group-hover:ring-white/20 transition-all overflow-hidden shadow-lg flex-shrink-0">
                         <img src={userAvatar} alt="User" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
                       </div>
-                      <div className="flex flex-col items-start mr-2">
-                        <span className="text-xs font-medium text-zinc-200 leading-none mb-0.5">{userName}</span>
+                      <div className="flex flex-col items-start mr-auto overflow-hidden">
+                        <span className="text-xs font-medium text-zinc-200 leading-none mb-0.5 truncate w-full text-left">{userName}</span>
                         <span className="text-[9px] text-zinc-600 font-medium leading-none mt-0.5 uppercase tracking-wider">{userRole}</span>
                       </div>
                       <ChevronDown size={12} className={`text-zinc-500 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
@@ -588,16 +741,16 @@ const App = () => {
                             onClick={() => setIsProfileOpen(false)}
                           ></div>
                           <motion.div
-                            initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
                             transition={{ duration: 0.15, ease: "easeOut" }}
-                            className="absolute right-0 top-full mt-2 w-56 bg-[#0B0B0B] border border-white/10 rounded-xl shadow-2xl shadow-black/50 backdrop-blur-xl z-50 overflow-hidden"
+                            className="absolute left-0 bottom-full mb-2 w-full bg-[#0B0B0B] border border-white/10 rounded-xl shadow-2xl shadow-black/50 backdrop-blur-xl z-50 overflow-hidden"
                           >
                             <div className="p-1">
                               <button
                                 onClick={() => {
-                                  setActiveView('profile');
+                                  navigate('/profile');
                                   setIsProfileOpen(false);
                                 }}
                                 className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-lg transition-colors group">
@@ -606,7 +759,7 @@ const App = () => {
                               </button>
                               <button
                                 onClick={() => {
-                                  setActiveView('settings');
+                                  navigate('/settings');
                                   setIsProfileOpen(false);
                                 }}
                                 className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-lg transition-colors group">
@@ -616,7 +769,7 @@ const App = () => {
                               {isAdmin && (
                                 <button
                                   onClick={() => {
-                                    setActiveView('users');
+                                    navigate('/users');
                                     setIsProfileOpen(false);
                                   }}
                                   className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-lg transition-colors group"
@@ -642,87 +795,206 @@ const App = () => {
                     </AnimatePresence>
                   </div>
                 </div>
-              </header>
+              </aside>
 
-              {/* Page Content Scrollable Area */}
-              <div className={`flex-1 ${activeView === 'chat' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
-                <div className="h-full">
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={activeView}
-                      initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                      transition={{ duration: 0.25, ease: "easeOut" }}
-                      className="h-full"
+              {/* Main Content */}
+              <main className="flex-1 flex flex-col min-w-0 h-full relative z-10">
+
+                {/* Minimalist Header */}
+                <header className="h-14 border-b border-white/5 sticky top-0 z-10 px-4 md:px-6 flex items-center justify-between backdrop-blur-md bg-black/40 transition-all duration-300">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setIsSidebarOpen(true)}
+                      className="md:hidden p-1 -ml-1 text-zinc-400 hover:text-zinc-100"
                     >
-                      {activeView === 'dashboard' && <Dashboard leads={leads} chartData={chartData} activity={activity} />}
-                      {activeView === 'leads' && <Leads leads={leads} onOpenChat={handleOpenChat} isAdmin={isAdmin} />}
-                      {activeView === 'chat' && (
-                        <Chat
-                          chats={wahaChats}
-                          leads={leads}
-                          apifyLeads={apifyLeads}
-                          initialChatId={selectedLeadForChat}
-                          initialLead={selectedLead}
-                          key={selectedLeadForChat}
-                          onConnectClick={() => setIsQRModalOpen(true)}
-                          isAdmin={isAdmin}
-                        />
-                      )}
-                      {activeView === 'apify' && <ApifyImports
-                        items={apifyLeads}
-                        onOpenChat={handleOpenChat}
-                        onImport={async () => {
-                          const refreshedData = await fetchApifyLeads();
-                          setApifyLeads(refreshedData);
-                        }}
-                      />}
-                      {activeView === 'automation' && <Automation flows={automations} isAdmin={isAdmin} />}
-                      {activeView === 'users' && isAdmin && <UserManagement />}
-                      {activeView === 'profile' && (
-                        <Profile
-                          user={{
-                            name: userName,
-                            email: userEmail,
-                            avatar: userAvatar,
-                            role: userRole
-                          }}
-                          leads={leads}
-                          activity={activity}
-                        />
-                      )}
-                      {activeView === 'settings' && (
-                        <Settings
-                          user={{
-                            id: (supabase.auth.getUser() as any)?.id || '', // Ideally we get this from state, but for now this works or we can fetch it
-                            name: userName,
-                            email: userEmail,
-                            avatar: userAvatar
-                          }}
-                          wahaStatus={wahaStatus}
-                          onUpdateProfile={async () => {
-                            // Refresh profile data
-                            const { data: { user } } = await supabase.auth.getUser();
-                            if (user) {
-                              const profile = await authActions.getCurrentProfile(user.id);
-                              if (profile) {
-                                setUserName(profile.full_name || user.user_metadata.full_name);
-                                setUserAvatar(profile.avatar_url || user.user_metadata.avatar_url);
-                              }
-                            }
-                          }}
-                        />
-                      )}
-                    </motion.div>
-                  </AnimatePresence>
+                      <Menu size={20} />
+                    </button>
+                    <div className="flex items-center text-xs font-medium tracking-wide">
+                      <span className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-default hidden md:inline">{t('header.overview')}</span>
+                      <span className="mx-2 text-zinc-700 hidden md:inline">/</span>
+                      <span className="text-zinc-200 capitalize">{location.pathname === '/' ? 'dashboard' : location.pathname.replace('/', '')}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-6">
+                    <div className="h-4 w-px bg-white/5"></div>
+
+                    <button className="relative group p-1">
+                      <Bell strokeWidth={1.5} size={16} className="text-zinc-500 group-hover:text-zinc-300 transition-colors" />
+                      <span className="absolute top-1 right-0.5 w-1.5 h-1.5 bg-bronze-500 rounded-full border-2 border-black"></span>
+                    </button>
+
+
+                  </div>
+                </header>
+
+                {/* Page Content Scrollable Area */}
+                <div className={`flex-1 ${location.pathname === '/chat' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
+                  <div className="h-full">
+                    <AnimatePresence mode="wait">
+                      <Routes location={location} key={location.pathname}>
+                        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                        <Route path="/dashboard" element={
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                            className="h-full"
+                          >
+                            <Dashboard leads={leads} chartData={chartData} activity={activity} isLoading={isLoadingData} />
+                          </motion.div>
+                        } />
+                        <Route path="/leads" element={
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                            className="h-full"
+                          >
+                            <Leads leads={leads} onOpenChat={handleOpenChat} onLeadUpdate={handleLeadUpdate} isAdmin={isAdmin} isLoading={isLoadingData} onLoadMore={loadMoreLeads} hasMore={hasMore} loadingMore={loadingMore} />
+                          </motion.div>
+                        } />
+                        <Route path="/chat" element={
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                            className="h-full"
+                          >
+                            <Chat
+                              chats={wahaChats}
+                              leads={leads}
+                              apifyLeads={apifyLeads}
+                              initialChatId={selectedLeadForChat}
+                              initialLead={selectedLead}
+                              key={selectedLeadForChat} // Force remount if selected lead changes? Maybe better to handle inside Chat
+                              onConnectClick={() => setIsQRModalOpen(true)}
+                              isAdmin={isAdmin}
+                              profilePics={profilePics}
+                              isLoading={isLoadingData}
+                              onNavigate={(path) => navigate(path)}
+                            />
+                          </motion.div>
+                        } />
+                        <Route path="/apify" element={
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                            className="h-full"
+                          >
+                            <ApifyImports
+                              items={apifyLeads}
+                              onOpenChat={handleOpenChat}
+                              onImport={async () => {
+                                // Refresh logic - reset to first page
+                                const fresh = await fetchApifyLeads(0);
+                                setApifyLeads(fresh);
+                                setApifyPage(0);
+                                setApifyHasMore(fresh.length === 50);
+                              }}
+                              onLoadMore={loadMoreApifyLeads}
+                              hasMore={apifyHasMore}
+                              loadingMore={apifyLoadingMore}
+                            />
+                          </motion.div>
+                        } />
+                        <Route path="/automation" element={
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                            className="h-full"
+                          >
+                            <Automation flows={automations} isAdmin={isAdmin} isLoading={isLoadingData} />
+                          </motion.div>
+                        } />
+                        <Route path="/automation/apifyblast" element={
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                            className="h-full"
+                          >
+                            <ApifyBlastPage />
+                          </motion.div>
+                        } />
+                        <Route path="/users" element={
+                          isAdmin ? (
+                            <motion.div
+                              initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                              className="h-full"
+                            >
+                              <UserManagement />
+                            </motion.div>
+                          ) : <Navigate to="/" />
+                        } />
+                        <Route path="/profile" element={
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                            className="h-full"
+                          >
+                            <Profile
+                              user={{
+                                name: userName,
+                                email: userEmail,
+                                avatar: userAvatar,
+                                role: userRole
+                              }}
+                              leads={leads}
+                              activity={activity}
+                            />
+                          </motion.div>
+                        } />
+                        <Route path="/settings" element={
+                          <motion.div
+                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                            className="h-full"
+                          >
+                            <Settings
+                              user={{
+                                id: userId,
+                                name: userName,
+                                email: userEmail,
+                                avatar: userAvatar
+                              }}
+                              wahaStatus={wahaStatus}
+                              onUpdateProfile={checkUser}
+                            />
+                          </motion.div>
+                        } />
+                        <Route path="/system-settings" element={
+                          isAdmin ? (
+                            <motion.div
+                              initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                              className="h-full"
+                            >
+                              <SystemSettings isAdmin={isAdmin} wahaStatus={wahaStatus} />
+                            </motion.div>
+                          ) : <Navigate to="/" />
+                        } />
+                        <Route path="*" element={<Navigate to="/" />} />
+                      </Routes>
+                    </AnimatePresence>
+
+                  </div>
                 </div>
-              </div>
-            </main>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
+              </main>
+            </motion.div >
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        } />
+      </Routes>
+    </AnimatePresence>
   );
 };
 
