@@ -1,15 +1,16 @@
-
 // @ts-nocheck
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Filter, Plus, MoreHorizontal, MessageCircle, Phone, MapPin, Calendar, DollarSign, X } from 'lucide-react';
+import { Search, Filter, Plus, MoreHorizontal, MessageCircle, Phone, MapPin, Calendar, DollarSign, X, Trash2, RefreshCw } from 'lucide-react';
 import { Lead, Stage, Temperature } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HighlightText } from './HighlightText';
+import { deleteLeads, fetchContactProfilePic } from '../services/supabaseService';
 
 interface LeadsProps {
   leads: Lead[];
   onOpenChat: (lead: Lead) => void;
+  onRefresh?: () => void | Promise<void>;
   isAdmin: boolean;
 }
 
@@ -57,9 +58,12 @@ const TemperatureBadge = ({ temp }: { temp: string }) => {
   );
 };
 
-export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
+export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, onRefresh, isAdmin }) => {
   const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [profilePics, setProfilePics] = useState<Record<string, string | null>>({});
 
   // Advanced Filters State
   const [showFilters, setShowFilters] = useState(false);
@@ -72,6 +76,39 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
     dateStart: '',
     dateEnd: ''
   });
+
+  // Fetch profile pictures for leads with phone numbers
+  useEffect(() => {
+    const fetchProfilePics = async () => {
+      const leadsWithPhone = leads.filter(lead => lead.phone && !profilePics[lead.phone]);
+
+      // Batch fetch in groups of 5 to avoid overwhelming the API
+      for (let i = 0; i < leadsWithPhone.length; i += 5) {
+        const batch = leadsWithPhone.slice(i, i + 5);
+        const promises = batch.map(async (lead) => {
+          try {
+            const pic = await fetchContactProfilePic(lead.phone);
+            return { phone: lead.phone, pic };
+          } catch {
+            return { phone: lead.phone, pic: null };
+          }
+        });
+
+        const results = await Promise.all(promises);
+        setProfilePics(prev => {
+          const newPics = { ...prev };
+          results.forEach(({ phone, pic }) => {
+            newPics[phone] = pic;
+          });
+          return newPics;
+        });
+      }
+    };
+
+    if (leads.length > 0) {
+      fetchProfilePics();
+    }
+  }, [leads]);
 
   const filteredLeads = leads.filter(lead => {
     const matchesSearch = lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -98,6 +135,42 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
   });
 
   const activeFiltersCount = Object.values(filters).filter(v => v !== 'all' && v !== '').length;
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedItems(new Set(filteredLeads.map(lead => lead.id)));
+    } else {
+      setSelectedItems(new Set());
+    }
+  };
+
+  const handleSelectItem = (id: string) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedItems(newSelected);
+  };
+
+  const handleDelete = async () => {
+    if (selectedItems.size === 0) return;
+
+    if (window.confirm(`Tem certeza que deseja excluir ${selectedItems.size} leads?`)) {
+      setDeleting(true);
+      try {
+        await deleteLeads(Array.from(selectedItems));
+        setSelectedItems(new Set());
+        if (onRefresh) await onRefresh();
+      } catch (error) {
+        console.error('Error deleting leads:', error);
+        alert('Falha ao excluir leads');
+      } finally {
+        setDeleting(false);
+      }
+    }
+  };
 
   return (
     <div className="p-8 h-full flex flex-col overflow-hidden relative">
@@ -275,6 +348,19 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
             </AnimatePresence>
           </div>
 
+          {/* Delete Button - appears when items are selected */}
+          {selectedItems.size > 0 && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="p-2 hover:bg-red-500/10 text-red-500 hover:text-red-400 rounded-lg border border-transparent hover:border-red-500/20 transition-all flex items-center gap-2"
+              title="Excluir Selecionados"
+            >
+              {deleting ? <RefreshCw className="animate-spin" size={16} /> : <Trash2 size={16} />}
+              <span className="text-xs font-bold uppercase tracking-wide">Excluir ({selectedItems.size})</span>
+            </button>
+          )}
+
           <button className="px-3 py-1.5 bg-zinc-100 hover:bg-white text-black rounded-lg text-xs font-bold uppercase tracking-wide transition-all shadow-[0_0_15px_rgba(255,255,255,0.1)] flex items-center gap-2">
             <Plus size={14} />
             {t('leads.add_lead')}
@@ -287,6 +373,16 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
         <table className="w-full text-left border-collapse">
           <thead className="sticky top-0 z-10 bg-black/80 backdrop-blur-sm">
             <tr>
+              <th className="py-3 px-4 border-b border-white/5 w-10">
+                <div className="flex items-center justify-center">
+                  <input
+                    type="checkbox"
+                    checked={filteredLeads.length > 0 && selectedItems.size === filteredLeads.length}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-zinc-100 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                  />
+                </div>
+              </th>
               <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.name')}</th>
               <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">Localização</th>
               <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">Categoria</th>
@@ -302,10 +398,28 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
               filteredLeads.map((lead) => (
                 <tr key={lead.id} className="group hover:bg-white/[0.02] transition-colors">
                   <td className="py-4 px-4">
+                    <div className="flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedItems.has(lead.id)}
+                        onChange={() => handleSelectItem(lead.id)}
+                        className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-zinc-100 focus:ring-0 focus:ring-offset-0 cursor-pointer opacity-50 group-hover:opacity-100 transition-opacity"
+                      />
+                    </div>
+                  </td>
+                  <td className="py-4 px-4">
                     <div className="flex items-center gap-4">
-                      <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-xs font-bold text-zinc-500 border border-white/5 group-hover:border-bronze-500/30 group-hover:text-bronze-500 transition-colors">
-                        {lead.name.charAt(0)}
-                      </div>
+                      {profilePics[lead.phone] ? (
+                        <img
+                          src={profilePics[lead.phone]!}
+                          alt={lead.name}
+                          className="w-8 h-8 rounded-full object-cover border border-white/10"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-xs font-bold text-zinc-500 border border-white/5 group-hover:border-bronze-500/30 group-hover:text-bronze-500 transition-colors">
+                          {lead.name.charAt(0)}
+                        </div>
+                      )}
                       <div>
                         <div className="font-semibold text-zinc-200 text-sm group-hover:text-white transition-colors">
                           <HighlightText text={lead.name} highlight={searchTerm} />
@@ -364,7 +478,7 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
               ))
             ) : (
               <tr>
-                <td colSpan={8} className="p-8 text-center text-zinc-500 text-sm">
+                <td colSpan={9} className="p-8 text-center text-zinc-500 text-sm">
                   Nenhum lead encontrado com os filtros selecionados.
                 </td>
               </tr>

@@ -202,55 +202,85 @@ export type Database = {
             }
             leads: {
                 Row: {
-                    company_name: string
-                    created_at: string | null
-                    email: string | null
                     id: number
-                    last_contact: string | null
+                    chat_id: string | null
                     name: string
+                    business: string | null
+                    company_name: string | null
+                    phone: string | null
+                    city: string | null
+                    state: string | null
+                    category: string | null
+                    stage: string | null
+                    temperature: string | null
+                    score: number | null
+                    budget: number | null
+                    notes: string | null
+                    source: string | null
+                    email: string | null
+                    last_contact: string | null
                     next_action: string | null
                     next_action_date: string | null
-                    phone: string | null
-                    source: string | null
-                    status: string | null
                     tags: string[] | null
                     user_id: string | null
-                    value: number | null
-                    chat_id: string | null
+                    created_at: string | null
+                    updated_at: string | null
+                    service: string | null
+                    status: string | null
                 }
                 Insert: {
-                    company_name: string
-                    created_at?: string | null
-                    email?: string | null
                     id?: number
-                    last_contact?: string | null
+                    chat_id?: string | null
                     name: string
+                    business?: string | null
+                    company_name?: string | null
+                    phone?: string | null
+                    city?: string | null
+                    state?: string | null
+                    category?: string | null
+                    stage?: string | null
+                    temperature?: string | null
+                    score?: number | null
+                    budget?: number | null
+                    notes?: string | null
+                    source?: string | null
+                    email?: string | null
+                    last_contact?: string | null
                     next_action?: string | null
                     next_action_date?: string | null
-                    phone?: string | null
-                    source?: string | null
-                    status?: string | null
                     tags?: string[] | null
                     user_id?: string | null
-                    value?: number | null
-                    chat_id?: string | null
+                    created_at?: string | null
+                    updated_at?: string | null
+                    service?: string | null
+                    status?: string | null
                 }
                 Update: {
-                    company_name?: string
-                    created_at?: string | null
-                    email?: string | null
                     id?: number
-                    last_contact?: string | null
+                    chat_id?: string | null
                     name?: string
+                    business?: string | null
+                    company_name?: string | null
+                    phone?: string | null
+                    city?: string | null
+                    state?: string | null
+                    category?: string | null
+                    stage?: string | null
+                    temperature?: string | null
+                    score?: number | null
+                    budget?: number | null
+                    notes?: string | null
+                    source?: string | null
+                    email?: string | null
+                    last_contact?: string | null
                     next_action?: string | null
                     next_action_date?: string | null
-                    phone?: string | null
-                    source?: string | null
-                    status?: string | null
                     tags?: string[] | null
                     user_id?: string | null
-                    value?: number | null
-                    chat_id?: string | null
+                    created_at?: string | null
+                    updated_at?: string | null
+                    service?: string | null
+                    status?: string | null
                 }
                 Relationships: [
                     {

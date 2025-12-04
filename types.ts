@@ -99,4 +99,5 @@ export interface Agent {
   temperature: number;
   is_active: boolean;
   user_id?: string;
+  split_messages?: boolean;
 }

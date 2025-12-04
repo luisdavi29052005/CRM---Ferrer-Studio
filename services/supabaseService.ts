@@ -24,20 +24,21 @@ export const fetchLeads = async (page = 0, pageSize = 50): Promise<Lead[]> => {
         return [];
     }
 
+
     return (data as DBLead[]).map(lead => ({
         id: lead.id.toString(),
         chat_id: lead.chat_id || '',
         name: lead.name || 'Unknown',
-        business: lead.company_name || lead.name || '', // Updated to use company_name or fallback
+        business: lead.business || lead.company_name || lead.name || '', // Use business column, fallback to company_name
         phone: lead.phone || '',
-        city: '', // Not in new schema? Checking types... it was in DBLead before. Let's keep empty for now or check schema.
-        state: '',
-        category: '',
-        stage: (lead.status as Stage) || 'New', // Mapped status to stage
-        temperature: 'Cold', // Default
-        score: lead.value ? Math.min(lead.value / 100, 100) : 0, // Mock score from value
-        budget: lead.value || 0,
-        notes: '',
+        city: lead.city || '',
+        state: lead.state || '',
+        category: lead.category || '',
+        stage: (lead.status as Stage) || (lead.stage as Stage) || 'New',
+        temperature: (lead.temperature as Temperature) || 'Cold',
+        score: lead.budget ? Math.min(lead.budget / 100, 100) : 0,
+        budget: Number(lead.budget) || 0,
+        notes: lead.notes || '',
         source: (lead.source as Source) || 'manual',
         last_interaction: lead.last_contact ? new Date(lead.last_contact).toLocaleDateString() : 'Never',
     }));
@@ -98,6 +99,18 @@ export const deleteApifyLeads = async (ids: string[]): Promise<void> => {
 
     if (error) {
         console.error('Error deleting apify leads:', error);
+        throw error;
+    }
+};
+
+export const deleteLeads = async (ids: string[]): Promise<void> => {
+    const { error } = await supabase
+        .from('leads')
+        .delete()
+        .in('id', ids);
+
+    if (error) {
+        console.error('Error deleting leads:', error);
         throw error;
     }
 };
@@ -307,7 +320,7 @@ export const checkNumberExists = async (phone: string): Promise<boolean> => {
     try {
         // Format phone number: remove non-digits (leave only raw numbers)
         const cleanPhone = phone.replace(/\D/g, '');
-        console.log(`[checkNumberExists] Raw: "${phone}" -> Clean: "${cleanPhone}"`);
+
 
         if (!cleanPhone) return false;
 
@@ -381,6 +394,21 @@ export const fetchContactProfilePic = async (chatId: string): Promise<string | n
         return null;
     } catch (error) {
         console.error('Error fetching profile pic:', error);
+        return null;
+    }
+};
+
+export const fetchChatId = async (chatJid: string): Promise<number | null> => {
+    try {
+        // Use port 3001 for backend proxy to avoid CORS
+        const response = await fetch(`http://localhost:3001/api/chats/id?chatJid=${encodeURIComponent(chatJid)}`);
+        if (response.ok) {
+            const data = await response.json();
+            return data.id || null;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error fetching chat ID:', error);
         return null;
     }
 };
@@ -835,6 +863,10 @@ export const deleteAgent = async (id: string): Promise<boolean> => {
     return true;
 };
 
+
+
+
+
 export const fetchChartData = async () => {
     const { data, error } = await supabase
         .rpc('get_weekly_stats');
@@ -954,6 +986,29 @@ export const uploadChatMedia = async (file: File): Promise<{ url: string | null,
         return { url: data.publicUrl, error: null };
     } catch (e: any) {
         console.error('Error in uploadChatMedia:', e);
+        return { url: null, error: e.message };
+    }
+};
+
+export const uploadAgentAvatar = async (file: File): Promise<{ url: string | null, error: string | null }> => {
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `avatars/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+            .from('media')
+            .upload(fileName, file);
+
+        if (uploadError) {
+            console.error('Error uploading avatar:', uploadError);
+            return { url: null, error: uploadError.message };
+        }
+
+        const { data } = supabase.storage.from('media').getPublicUrl(fileName);
+        return { url: data.publicUrl, error: null };
+    } catch (e: any) {
+        console.error('Error in uploadAgentAvatar:', e);
+        return { url: null, error: e.message };
     }
 };
 

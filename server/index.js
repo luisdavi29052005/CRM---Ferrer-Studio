@@ -91,6 +91,19 @@ app.post('/webhook', async (req, res) => {
                 chatUpdateData.name = finalName;
             }
 
+            // Upsert Chat to get ID
+            const { data: upsertedChat, error: chatError } = await supabase
+                .from('whatsapp_waha_chats')
+                .upsert(chatUpdateData, { onConflict: 'chat_jid' })
+                .select('id')
+                .single();
+
+            if (chatError) {
+                console.error('Error upserting chat:', chatError);
+            }
+
+            const chatId = upsertedChat?.id;
+
             if (chatId) {
                 const { error: messageError } = await supabase
                     .from('whatsapp_waha_messages')
@@ -236,7 +249,6 @@ app.get('/api/contacts/profile-picture', async (req, res) => {
             return res.status(500).json({ error: 'WAHA API URL not configured in System Settings' });
         }
         const wahaUrl = `${wahaApiUrl}/contacts/profile-picture?contactId=${encodeURIComponent(contactId)}&session=${session}`;
-        console.log(`Fetching profile picture from: ${wahaUrl}`);
 
         const response = await fetch(wahaUrl);
 
@@ -254,6 +266,25 @@ app.get('/api/contacts/profile-picture', async (req, res) => {
 });
 
 
+
+app.get('/api/chats/id', async (req, res) => {
+    const { chatJid } = req.query;
+    if (!chatJid) return res.status(400).json({ error: 'Missing chatJid' });
+
+    try {
+        const { data, error } = await supabase
+            .from('whatsapp_waha_chats')
+            .select('id')
+            .eq('chat_jid', chatJid)
+            .maybeSingle();
+
+        if (error) throw error;
+        res.json(data || { id: null });
+    } catch (error) {
+        console.error('Error fetching chat ID:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
 
 const { ApifyClient } = require('apify-client');
 

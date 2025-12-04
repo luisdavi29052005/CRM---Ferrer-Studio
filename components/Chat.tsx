@@ -8,9 +8,9 @@ import { ChatInput } from './chat/ChatInput';
 import { ContactInfo } from './chat/ContactInfo';
 import { ChatLoading } from './chat/ChatLoading';
 import { MediaPreview } from './chat/MediaPreview';
-import { Loader2, QrCode, Smartphone, RefreshCw, MessageSquare, MoreVertical, Plus, MonitorSmartphone } from 'lucide-react';
+import { Loader2, QrCode, Smartphone, RefreshCw, MessageSquare, MoreVertical, Plus, MonitorSmartphone, Play, Square, LogOut, RotateCw } from 'lucide-react';
 import { Lead } from '../types';
-import { fetchLeads, fetchApifyLeads, fetchContactProfilePic, fetchWahaChats, fetchWahaMessages, formatChatId } from '../services/supabaseService';
+import { fetchLeads, fetchApifyLeads, fetchContactProfilePic, fetchWahaChats, fetchWahaMessages, formatChatId, fetchChatId } from '../services/supabaseService';
 import { supabase } from '../supabaseClient';
 import { useTranslation } from 'react-i18next';
 import { aiService } from '../services/aiService';
@@ -26,9 +26,22 @@ interface ChatProps {
   profilePics: Record<string, string>;
   isLoading?: boolean;
   onNavigate?: (view: string) => void;
+  selectedChatId?: string | null;
+  onSelectChat?: (chatId: string | null) => void;
 }
 
-export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profilePics, leads: propLeads, apifyLeads: propApifyLeads, isLoading, onNavigate, chats: propChats }) => {
+export const Chat: React.FC<ChatProps> = ({
+  initialChatId,
+  initialLead,
+  profilePics,
+  leads: propLeads,
+  apifyLeads: propApifyLeads,
+  isLoading,
+  onNavigate,
+  chats: propChats,
+  selectedChatId: propSelectedChatId,
+  onSelectChat: propOnSelectChat
+}) => {
   const { t } = useTranslation();
   const [sessionName] = useState('default'); // Default session
   const [status, setStatus] = useState<'WORKING' | 'SCAN_QR_CODE' | 'STARTING' | 'STOPPED' | 'FAILED'>('STARTING');
@@ -44,24 +57,33 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
     }
   }, [propChats]);
 
-  // Initialize selectedChatId with robust fallback logic to prevent flicker
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(() => {
-    console.log('Chat initializing', { initialChatId, initialLead });
+  // Internal state for selection if not controlled by prop
+  const [internalSelectedChatId, setInternalSelectedChatId] = useState<string | null>(() => {
     if (initialChatId) return formatChatId(initialChatId);
     if (initialLead?.chat_id) return formatChatId(initialLead.chat_id);
     if (initialLead?.phone) return formatChatId(initialLead.phone);
     return null;
   });
 
+  // Use prop if available, otherwise internal state
+  const selectedChatId = propSelectedChatId !== undefined ? propSelectedChatId : internalSelectedChatId;
+
+  const handleSelectChat = (id: string | null) => {
+    if (propOnSelectChat) {
+      propOnSelectChat(id);
+    } else {
+      setInternalSelectedChatId(id);
+    }
+  };
+
   // Ensure selectedChatId updates if props change (e.g. if initialLead was undefined on first render)
   useEffect(() => {
-    console.log('Chat props changed', { initialChatId, initialLead });
     if (initialChatId) {
-      setSelectedChatId(formatChatId(initialChatId));
+      handleSelectChat(formatChatId(initialChatId));
     } else if (initialLead?.chat_id) {
-      setSelectedChatId(formatChatId(initialLead.chat_id));
+      handleSelectChat(formatChatId(initialLead.chat_id));
     } else if (initialLead?.phone) {
-      setSelectedChatId(formatChatId(initialLead.phone));
+      handleSelectChat(formatChatId(initialLead.phone));
     }
   }, [initialChatId, initialLead]);
   const [messages, setMessages] = useState<WahaMessage[]>([]);
@@ -134,6 +156,19 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
     return () => clearInterval(interval);
   }, [checkSessionStatus]);
 
+  // Configure webhook when session is WORKING (run once)
+  const webhookConfigured = useRef(false);
+  useEffect(() => {
+    if (status === 'WORKING' && !webhookConfigured.current) {
+      webhookConfigured.current = true;
+      wahaService.configureWebhook(sessionName).then(() => {
+        console.log('Webhook configured successfully for session:', sessionName);
+      }).catch(err => {
+        console.error('Failed to configure webhook:', err);
+      });
+    }
+  }, [status, sessionName]);
+
   // 3. Load Messages for selected chat
   useEffect(() => {
     if (!selectedChatId) return;
@@ -142,28 +177,12 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
 
     const fetchMsgs = async () => {
       try {
-        // Fetch from both sources in parallel
-        const [wahaMsgs, supabaseMsgs] = await Promise.all([
-          wahaService.getChatMessages(sessionName, selectedChatId).catch(() => []),
-          fetchWahaMessages(selectedChatId).catch(() => [])
-        ]);
+        // Fetch only from Supabase (history)
+        const supabaseMsgs = await fetchWahaMessages(selectedChatId).catch(() => []);
 
         if (!isMounted) return;
 
-        // Merge messages: Supabase (history) + WAHA (live)
-        // Use a Map to deduplicate by ID
-        const msgMap = new Map<string, WahaMessage>();
-
-        // Add Supabase messages first
-        supabaseMsgs.forEach(m => msgMap.set(m.id, m));
-
-        // Add/Override with WAHA messages
-        wahaMsgs.forEach(m => msgMap.set(m.id, m));
-
-        // Convert back to array and sort by timestamp
-        const mergedMsgs = Array.from(msgMap.values()).sort((a, b) => a.timestamp - b.timestamp);
-
-        setMessages(mergedMsgs);
+        setMessages(supabaseMsgs.sort((a, b) => a.timestamp - b.timestamp));
 
         // Mark as seen (only if connected)
         if (status === 'WORKING') {
@@ -319,15 +338,10 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
 
     const setupSubscription = async () => {
       // Get Integer ID for this chat to subscribe to messages
-      const { data } = await supabase
-        .from('whatsapp_waha_chats')
-        .select('id')
-        .eq('chat_jid', chatJid)
-        .maybeSingle();
+      // Use proxy function to avoid CORS
+      const chatIdInt = await fetchChatId(chatJid);
 
-      if (!data) return; // Chat not in DB yet
-
-      const chatIdInt = data.id;
+      if (!chatIdInt) return; // Chat not in DB yet
 
       channel = supabase
         .channel(`chat:${chatIdInt}`)
@@ -552,6 +566,24 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
   };
 
   // --- ACTIONS ---
+  const handleStartSession = async () => {
+    try {
+      await wahaService.startSession(sessionName);
+      // Status update will be handled by polling
+    } catch (error) {
+      console.error('Error starting session:', error);
+    }
+  };
+
+  const handleStopSession = async () => {
+    try {
+      await wahaService.stopSession(sessionName);
+      // Status update will be handled by polling
+    } catch (error) {
+      console.error('Error stopping session:', error);
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await wahaService.logoutSession(sessionName);
@@ -563,7 +595,8 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
 
   const handleRestart = async () => {
     try {
-      await wahaService.startSession(sessionName);
+      await wahaService.restartSession(sessionName);
+      // Status update will be handled by polling
     } catch (error) {
       console.error('Error restarting session:', error);
     }
@@ -646,6 +679,45 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {/* Session Control Buttons */}
+          <div className="flex items-center gap-1 px-2 py-1 bg-zinc-900/50 rounded-lg border border-white/5">
+            <button
+              onClick={handleStartSession}
+              disabled={status === 'WORKING' || status === 'STARTING'}
+              title="Iniciar Sessão"
+              className="p-2 hover:bg-emerald-500/20 text-zinc-400 hover:text-emerald-400 rounded-md transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Play size={14} />
+            </button>
+            <button
+              onClick={handleStopSession}
+              disabled={status === 'STOPPED' || status === 'FAILED'}
+              title="Parar Sessão"
+              className="p-2 hover:bg-amber-500/20 text-zinc-400 hover:text-amber-400 rounded-md transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <Square size={14} />
+            </button>
+            <button
+              onClick={handleLogout}
+              disabled={status !== 'WORKING'}
+              title="Desconectar (Logout)"
+              className="p-2 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 rounded-md transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <LogOut size={14} />
+            </button>
+            <button
+              onClick={handleRestart}
+              disabled={status === 'STARTING'}
+              title="Reiniciar Sessão"
+              className="p-2 hover:bg-blue-500/20 text-zinc-400 hover:text-blue-400 rounded-md transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <RotateCw size={14} />
+            </button>
+          </div>
+
+          {/* Divider */}
+          <div className="w-px h-6 bg-white/10"></div>
+
           <button
             onClick={handleRefresh}
             disabled={isChatListLoading}
@@ -669,7 +741,7 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
             leads={leads}
             apifyLeads={apifyLeads}
             selectedChatId={selectedChatId}
-            onSelectChat={setSelectedChatId}
+            onSelectChat={handleSelectChat}
             wahaProfile={wahaProfile}
             profilePics={localProfilePics}
             connectionStatus={status}
@@ -688,7 +760,7 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
               activeChat={activeChat}
               messages={messages}
               onToggleContactInfo={() => setShowContactInfo(!showContactInfo)}
-              onBack={() => setSelectedChatId(null)}
+              onBack={() => handleSelectChat(null)}
               profilePic={localProfilePics[selectedChatId]}
               presence={contactPresence}
               currentUserId={wahaProfile?.id}

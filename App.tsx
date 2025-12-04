@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
+import { Sidebar } from './components/Sidebar';
 import { Routes, Route, Navigate, useLocation, useNavigate, BrowserRouter as Router } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, Users, MessageSquare, Database, Zap, Bell, ChevronDown, Activity, ArrowRight, Lock, Mail, LogOut, Settings as SettingsIcon, User, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -236,9 +237,7 @@ const App = () => {
   const [userEmail, setUserEmail] = useState<string>('');
   const [userId, setUserId] = useState<string>('');
   const [userRole, setUserRole] = useState<string>('User');
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -475,29 +474,33 @@ const App = () => {
               setWahaChats(prev => {
                 const newChat = payload.new as any;
                 const mappedChat: WahaChat = {
-                  id: newChat.id.toString(),
+                  id: newChat.chat_jid, // Use chat_jid as the ID, not the DB int ID
                   chatID: newChat.chat_jid,
                   push_name: newChat.name || newChat.chat_jid,
                   last_text: newChat.last_message || '',
                   last_from_me: newChat.last_message_from_me || false,
-                  last_timestamp: newChat.last_message_at ? new Date(newChat.last_message_at).getTime() : Date.now(),
+                  last_timestamp: newChat.last_message_at ? new Date(newChat.last_message_at).getTime() / 1000 : Date.now() / 1000,
                   status: 'received', // Default status for new chat
-                  unreadCount: newChat.unread_count || 0
+                  unreadCount: newChat.unread_count || 0,
+                  _persisted: true
                 };
                 return [mappedChat, ...prev];
               });
             } else if (payload.eventType === 'UPDATE') {
               setWahaChats(prev => prev.map(c => {
-                if (c.id === payload.new.id.toString()) {
+                // Check against chat_jid (c.id)
+                if (c.id === payload.new.chat_jid || c.chatID === payload.new.chat_jid) {
                   const updated = payload.new as any;
                   return {
                     ...c,
+                    id: updated.chat_jid, // Ensure ID stays consistent
                     chatID: updated.chat_jid,
                     push_name: updated.name || c.push_name,
                     last_text: updated.last_message || c.last_text,
                     last_from_me: updated.last_message_from_me !== undefined ? updated.last_message_from_me : c.last_from_me,
-                    last_timestamp: updated.last_message_at ? new Date(updated.last_message_at).getTime() : c.last_timestamp,
-                    unreadCount: updated.unread_count !== undefined ? updated.unread_count : c.unreadCount
+                    last_timestamp: updated.last_message_at ? new Date(updated.last_message_at).getTime() / 1000 : c.last_timestamp,
+                    unreadCount: updated.unread_count !== undefined ? updated.unread_count : c.unreadCount,
+                    _persisted: true
                   };
                 }
                 return c;
@@ -556,37 +559,7 @@ const App = () => {
     setApifyLoadingMore(false);
   };
 
-  const SidebarItem = ({ path, icon: Icon, label }: any) => {
-    const isActive = location.pathname === path || (path !== '/' && location.pathname.startsWith(path));
-    return (
-      <button
-        onClick={() => {
-          navigate(path);
-          setIsSidebarOpen(false);
-        }}
-        className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${isActive
-          ? 'text-zinc-100'
-          : 'text-zinc-500 hover:text-zinc-300'
-          } ${isCollapsed ? 'justify-center px-2' : ''}`}
-        title={isCollapsed ? label : ''}
-      >
-        {isActive && (
-          <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)] ${isCollapsed ? 'h-4' : ''}`}></div>
-        )}
-        <Icon strokeWidth={1.5} size={20} className={`transition-transform duration-300 ${isActive ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
-        {!isCollapsed && (
-          <motion.span
-            initial={{ opacity: 0, width: 0 }}
-            animate={{ opacity: 1, width: 'auto' }}
-            exit={{ opacity: 0, width: 0 }}
-            className="tracking-wide whitespace-nowrap overflow-hidden"
-          >
-            {label}
-          </motion.span>
-        )}
-      </button>
-    );
-  };
+
 
   if (authChecking) {
     return (
@@ -617,381 +590,234 @@ const App = () => {
     );
   }
 
-  return (
-    <AnimatePresence mode="wait">
+  if (!isAuthenticated) {
+    return (
       <Routes>
-        <Route path="/login" element={
-          !isAuthenticated ? (
-            <LoginScreen onLogin={() => setIsAuthenticated(true)} />
-          ) : (
-            <Navigate to="/" replace />
-          )
-        } />
-
-        <Route path="/*" element={
-          isAuthenticated ? (
-            <motion.div
-              key="app"
-              initial={{ opacity: 0, filter: 'blur(20px)' }}
-              animate={{ opacity: 1, filter: 'blur(0px)' }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="bg-[#050505] h-screen w-screen flex text-zinc-200 font-sans selection:bg-zinc-800 overflow-hidden relative"
-            >
-              <GridBackground />
-
-              {/* Mobile Sidebar Overlay */}
-              <AnimatePresence>
-                {isSidebarOpen && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    onClick={() => setIsSidebarOpen(false)}
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 md:hidden"
-                  />
-                )}
-              </AnimatePresence>
-
-              {/* Minimalist Dark Sidebar */}
-              <motion.aside
-                initial={false}
-                animate={{ width: isCollapsed ? 80 : 256 }}
-                className={`
-                fixed md:static inset-y-0 left-0 z-40 h-full flex flex-col bg-black/95 md:bg-black/40 border-r border-white/5 backdrop-blur-xl transition-all duration-300 ease-in-out
-                ${isSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'}
-              `}>
-                <div className={`p-6 ${isCollapsed ? 'px-2' : ''}`}>
-                  {/* Premium Logo Area */}
-                  <div className={`flex items-center mb-12 ${isCollapsed ? 'justify-center flex-col gap-4' : 'justify-between pl-2'}`}>
-                    <div className="flex flex-col items-center">
-                      {isCollapsed ? (
-                        <span className="font-bold tracking-tighter text-zinc-100 text-xl leading-none">F</span>
-                      ) : (
-                        <>
-                          <span className="font-bold tracking-tighter text-zinc-100 text-lg leading-none">FERRER</span>
-                          <span className="text-[10px] text-zinc-500 font-medium tracking-[0.3em] uppercase mt-1">Studio</span>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Desktop Collapse Toggle */}
-                    <button
-                      onClick={() => setIsCollapsed(!isCollapsed)}
-                      className={`hidden md:flex p-1.5 rounded-lg hover:bg-white/5 text-zinc-500 hover:text-zinc-300 transition-colors ${isCollapsed ? 'mt-2' : ''}`}
-                    >
-                      {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-                    </button>
-
-                    {/* Mobile Close */}
-                    <button
-                      onClick={() => setIsSidebarOpen(false)}
-                      className="md:hidden p-1 text-zinc-500 hover:text-zinc-300"
-                    >
-                      <X size={20} />
-                    </button>
-                  </div>
-
-                  <nav className="space-y-1">
-                    <SidebarItem path="/dashboard" icon={LayoutDashboard} label={t('sidebar.dashboard')} />
-                    <SidebarItem path="/leads" icon={Users} label={t('sidebar.leads')} />
-                    <SidebarItem path="/chat" icon={MessageSquare} label={t('sidebar.chat')} />
-                    <SidebarItem path="/apify" icon={Database} label={t('sidebar.imports')} />
-                    <SidebarItem path="/automation" icon={Zap} label={t('sidebar.automation')} />
-
-                    {isAdmin && (
-                      <>
-                        <div className="my-8 border-t border-white/5 mx-4"></div>
-                        <SidebarItem path="/users" icon={Users} label={t('sidebar.team')} />
-                        <SidebarItem path="/system-settings" icon={SettingsIcon} label={t('sidebar.system_settings') || 'Configurações do Sistema'} />
-                      </>
-                    )}
-                  </nav>
-                </div>
-
-                <div className={`mt-auto p-6 ${isCollapsed ? 'px-2' : ''}`}>
-                  <div className="relative">
-                    <button
-                      onClick={() => setIsProfileOpen(!isProfileOpen)}
-                      className={`w-full flex items-center gap-3 py-1 rounded-full hover:bg-white/5 transition-all duration-200 group border border-transparent hover:border-white/5 ${isCollapsed ? 'justify-center px-0' : 'pl-2 pr-1'}`}
-                    >
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 ring-1 ring-white/10 group-hover:ring-white/20 transition-all overflow-hidden shadow-lg flex-shrink-0">
-                        <img src={userAvatar} alt="User" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                      {!isCollapsed && (
-                        <>
-                          <div className="flex flex-col items-start mr-auto overflow-hidden">
-                            <span className="text-xs font-medium text-zinc-200 leading-none mb-0.5 truncate w-full text-left">{userName}</span>
-                            <span className="text-[9px] text-zinc-600 font-medium leading-none mt-0.5 uppercase tracking-wider">{userRole}</span>
-                          </div>
-                          <ChevronDown size={12} className={`text-zinc-500 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
-                        </>
-                      )}
-                    </button>
-
-                    {/* Profile Dropdown */}
-                    <AnimatePresence>
-                      {isProfileOpen && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-40"
-                            onClick={() => setIsProfileOpen(false)}
-                          ></div>
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                            transition={{ duration: 0.15, ease: "easeOut" }}
-                            className="absolute left-0 bottom-full mb-2 w-full bg-[#0B0B0B] border border-white/10 rounded-xl shadow-2xl shadow-black/50 backdrop-blur-xl z-50 overflow-hidden"
-                          >
-                            <div className="p-1">
-                              <button
-                                onClick={() => {
-                                  navigate('/profile');
-                                  setIsProfileOpen(false);
-                                }}
-                                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-lg transition-colors group">
-                                <User size={14} className="text-zinc-500 group-hover:text-zinc-300" />
-                                {t('profile_dropdown.view_profile')}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  navigate('/settings');
-                                  setIsProfileOpen(false);
-                                }}
-                                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-lg transition-colors group">
-                                <SettingsIcon size={14} className="text-zinc-500 group-hover:text-zinc-300" />
-                                {t('profile_dropdown.account_settings')}
-                              </button>
-                              {isAdmin && (
-                                <button
-                                  onClick={() => {
-                                    navigate('/users');
-                                    setIsProfileOpen(false);
-                                  }}
-                                  className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-100 hover:bg-white/5 rounded-lg transition-colors group"
-                                >
-                                  <Users size={14} className="text-zinc-500 group-hover:text-zinc-300" />
-                                  {t('profile_dropdown.team_management')}
-                                </button>
-                              )}
-                            </div>
-                            <div className="h-px bg-white/5 mx-1 my-1"></div>
-                            <div className="p-1">
-                              <button
-                                onClick={() => authActions.signOut()}
-                                className="w-full flex items-center gap-3 px-3 py-2 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors group"
-                              >
-                                <LogOut size={14} className="text-red-500/70 group-hover:text-red-400" />
-                                {t('profile_dropdown.sign_out')}
-                              </button>
-                            </div>
-                          </motion.div>
-                        </>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-              </motion.aside>
-
-              {/* Main Content */}
-              <main className="flex-1 flex flex-col min-w-0 h-full relative z-10">
-
-                {/* Minimalist Header */}
-                <header className="h-14 border-b border-white/5 sticky top-0 z-10 px-4 md:px-6 flex items-center justify-between backdrop-blur-md bg-black/40 transition-all duration-300">
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setIsSidebarOpen(true)}
-                      className="md:hidden p-1 -ml-1 text-zinc-400 hover:text-zinc-100"
-                    >
-                      <Menu size={20} />
-                    </button>
-                    <div className="flex items-center text-xs font-medium tracking-wide">
-                      <span className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-default hidden md:inline">{t('header.overview')}</span>
-                      <span className="mx-2 text-zinc-700 hidden md:inline">/</span>
-                      <span className="text-zinc-200 capitalize">{location.pathname === '/' ? 'dashboard' : location.pathname.replace('/', '')}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-6">
-                    <div className="h-4 w-px bg-white/5"></div>
-
-                    <button className="relative group p-1">
-                      <Bell strokeWidth={1.5} size={16} className="text-zinc-500 group-hover:text-zinc-300 transition-colors" />
-                      <span className="absolute top-1 right-0.5 w-1.5 h-1.5 bg-bronze-500 rounded-full border-2 border-black"></span>
-                    </button>
-
-
-                  </div>
-                </header>
-
-                {/* Page Content Scrollable Area */}
-                <div className={`flex-1 ${location.pathname === '/chat' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
-                  <div className="h-full">
-                    <AnimatePresence mode="wait">
-                      <Routes location={location} key={location.pathname}>
-                        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                        <Route path="/dashboard" element={
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                            className="h-full"
-                          >
-                            <Dashboard leads={leads} chartData={chartData} activity={activity} isLoading={isLoadingData} />
-                          </motion.div>
-                        } />
-                        <Route path="/leads" element={
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                            className="h-full"
-                          >
-                            <Leads leads={leads} onOpenChat={handleOpenChat} onLeadUpdate={handleLeadUpdate} isAdmin={isAdmin} isLoading={isLoadingData} onLoadMore={loadMoreLeads} hasMore={hasMore} loadingMore={loadingMore} />
-                          </motion.div>
-                        } />
-                        <Route path="/chat" element={
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                            className="h-full"
-                          >
-                            <Chat
-                              chats={wahaChats}
-                              leads={leads}
-                              apifyLeads={apifyLeads}
-                              initialChatId={selectedLeadForChat}
-                              initialLead={selectedLead}
-                              key={selectedLeadForChat} // Force remount if selected lead changes? Maybe better to handle inside Chat
-                              onConnectClick={() => setIsQRModalOpen(true)}
-                              isAdmin={isAdmin}
-                              profilePics={{}} // Handled internally by Chat
-                              isLoading={isLoadingData}
-                              onNavigate={(path) => navigate(path)}
-                            />
-                          </motion.div>
-                        } />
-                        <Route path="/apify" element={
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                            className="h-full"
-                          >
-                            <ApifyImports
-                              items={apifyLeads}
-                              onOpenChat={handleOpenChat}
-                              onImport={async () => {
-                                // Refresh logic - reset to first page
-                                const fresh = await fetchApifyLeads(0);
-                                setApifyLeads(fresh);
-                                setApifyPage(0);
-                                setApifyHasMore(fresh.length === 50);
-                              }}
-                              onLoadMore={loadMoreApifyLeads}
-                              hasMore={apifyHasMore}
-                              loadingMore={apifyLoadingMore}
-                            />
-                          </motion.div>
-                        } />
-                        <Route path="/automation" element={
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                            className="h-full"
-                          >
-                            <Automation flows={automations} isAdmin={isAdmin} isLoading={isLoadingData} />
-                          </motion.div>
-                        } />
-                        <Route path="/automation/apifyblast" element={
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                            className="h-full"
-                          >
-                            <ApifyBlastPage />
-                          </motion.div>
-                        } />
-                        <Route path="/users" element={
-                          isAdmin ? (
-                            <motion.div
-                              initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                              className="h-full"
-                            >
-                              <UserManagement />
-                            </motion.div>
-                          ) : <Navigate to="/" />
-                        } />
-                        <Route path="/profile" element={
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                            className="h-full"
-                          >
-                            <Profile
-                              user={{
-                                name: userName,
-                                email: userEmail,
-                                avatar: userAvatar,
-                                role: userRole
-                              }}
-                              leads={leads}
-                              activity={activity}
-                            />
-                          </motion.div>
-                        } />
-                        <Route path="/settings" element={
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                            className="h-full"
-                          >
-                            <Settings
-                              user={{
-                                id: userId,
-                                name: userName,
-                                email: userEmail,
-                                avatar: userAvatar
-                              }}
-                              wahaStatus={wahaStatus}
-                              onUpdateProfile={checkUser}
-                            />
-                          </motion.div>
-                        } />
-                        <Route path="/system-settings" element={
-                          isAdmin ? (
-                            <motion.div
-                              initial={{ opacity: 0, y: 10, scale: 0.99 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: -10, scale: 0.99 }}
-                              className="h-full"
-                            >
-                              <SystemSettings isAdmin={isAdmin} wahaStatus={wahaStatus} />
-                            </motion.div>
-                          ) : <Navigate to="/" />
-                        } />
-                        <Route path="*" element={<Navigate to="/" />} />
-                      </Routes>
-                    </AnimatePresence>
-
-                  </div>
-                </div>
-              </main>
-            </motion.div >
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        } />
+        <Route path="/login" element={<LoginScreen onLogin={() => setIsAuthenticated(true)} />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </AnimatePresence>
+    );
+  }
+
+  return (
+    <motion.div
+      key="app"
+      initial={{ opacity: 0, filter: 'blur(20px)' }}
+      animate={{ opacity: 1, filter: 'blur(0px)' }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="bg-[#050505] h-screen w-screen flex text-zinc-200 font-sans selection:bg-zinc-800 overflow-hidden relative"
+    >
+      <GridBackground />
+
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        isAdmin={isAdmin}
+        user={{
+          name: userName,
+          role: userRole,
+          avatar: userAvatar
+        }}
+        onSignOut={() => authActions.signOut()}
+      />
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col min-w-0 h-full relative z-10">
+
+        {/* Minimalist Header */}
+        <header className="h-14 border-b border-white/5 sticky top-0 z-10 px-4 md:px-6 flex items-center justify-between backdrop-blur-md bg-black/40 transition-all duration-300">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="md:hidden p-1 -ml-1 text-zinc-400 hover:text-zinc-100"
+            >
+              <Menu size={20} />
+            </button>
+            <div className="flex items-center text-xs font-medium tracking-wide">
+              <span className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-default hidden md:inline">{t('header.overview')}</span>
+              <span className="mx-2 text-zinc-700 hidden md:inline">/</span>
+              <span className="text-zinc-200 capitalize">{location.pathname === '/' ? 'dashboard' : location.pathname.replace('/', '')}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <div className="h-4 w-px bg-white/5"></div>
+
+            <button className="relative group p-1">
+              <Bell strokeWidth={1.5} size={16} className="text-zinc-500 group-hover:text-zinc-300 transition-colors" />
+              <span className="absolute top-1 right-0.5 w-1.5 h-1.5 bg-bronze-500 rounded-full border-2 border-black"></span>
+            </button>
+          </div>
+        </header>
+
+        {/* Page Content Scrollable Area */}
+        <div className={`flex-1 ${location.pathname === '/chat' ? 'overflow-hidden' : 'overflow-y-auto custom-scrollbar'}`}>
+          <div className="h-full">
+            <AnimatePresence mode="wait">
+              <Routes location={location} key={location.pathname}>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                    className="h-full"
+                  >
+                    <Dashboard leads={leads} chartData={chartData} activity={activity} isLoading={isLoadingData} />
+                  </motion.div>
+                } />
+                <Route path="/leads" element={
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                    className="h-full"
+                  >
+                    <Leads leads={leads} onOpenChat={handleOpenChat} onRefresh={async () => {
+                      const fresh = await fetchLeads(0);
+                      setLeads(fresh);
+                      setPage(0);
+                      setHasMore(fresh.length === 50);
+                    }} isAdmin={isAdmin} />
+                  </motion.div>
+                } />
+                <Route path="/chat" element={
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                    className="h-full"
+                  >
+                    <Chat
+                      chats={wahaChats}
+                      leads={leads}
+                      apifyLeads={apifyLeads}
+                      selectedChatId={selectedLeadForChat}
+                      onSelectChat={setSelectedLeadForChat}
+                      initialChatId={selectedLeadForChat} // Keep for initial load if needed, but controlled prop takes precedence
+                      initialLead={selectedLead}
+                      onConnectClick={() => setIsQRModalOpen(true)}
+                      isAdmin={isAdmin}
+                      profilePics={{}} // Handled internally by Chat
+                      isLoading={isLoadingData}
+                      onNavigate={(path) => navigate(path)}
+                    />
+                  </motion.div>
+                } />
+                <Route path="/apify" element={
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                    className="h-full"
+                  >
+                    <ApifyImports
+                      items={apifyLeads}
+                      onOpenChat={handleOpenChat}
+                      onImport={async () => {
+                        // Refresh logic - reset to first page
+                        const fresh = await fetchApifyLeads(0);
+                        setApifyLeads(fresh);
+                        setApifyPage(0);
+                        setApifyHasMore(fresh.length === 50);
+                      }}
+                      onLoadMore={loadMoreApifyLeads}
+                      hasMore={apifyHasMore}
+                      loadingMore={apifyLoadingMore}
+                    />
+                  </motion.div>
+                } />
+                <Route path="/automation" element={
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                    className="h-full"
+                  >
+                    <Automation flows={automations} isAdmin={isAdmin} isLoading={isLoadingData} />
+                  </motion.div>
+                } />
+                <Route path="/automation/apifyblast" element={
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                    className="h-full"
+                  >
+                    <ApifyBlastPage />
+                  </motion.div>
+                } />
+                <Route path="/users" element={
+                  isAdmin ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                      className="h-full"
+                    >
+                      <UserManagement />
+                    </motion.div>
+                  ) : <Navigate to="/" />
+                } />
+                <Route path="/profile" element={
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                    className="h-full"
+                  >
+                    <Profile
+                      user={{
+                        name: userName,
+                        email: userEmail,
+                        avatar: userAvatar,
+                        role: userRole
+                      }}
+                      leads={leads}
+                      activity={activity}
+                    />
+                  </motion.div>
+                } />
+                <Route path="/settings" element={
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                    className="h-full"
+                  >
+                    <Settings
+                      user={{
+                        id: userId,
+                        name: userName,
+                        email: userEmail,
+                        avatar: userAvatar
+                      }}
+                      wahaStatus={wahaStatus}
+                      onUpdateProfile={checkUser}
+                    />
+                  </motion.div>
+                } />
+                <Route path="/system-settings" element={
+                  isAdmin ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.99 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.99 }}
+                      className="h-full"
+                    >
+                      <SystemSettings isAdmin={isAdmin} wahaStatus={wahaStatus} />
+                    </motion.div>
+                  ) : <Navigate to="/" />
+                } />
+                <Route path="*" element={<Navigate to="/" />} />
+              </Routes>
+            </AnimatePresence>
+
+          </div>
+        </div>
+      </main>
+    </motion.div >
   );
 };
 

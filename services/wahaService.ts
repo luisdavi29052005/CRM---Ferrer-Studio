@@ -150,7 +150,19 @@ class WahaService {
     }
 
     async startSession(session: string): Promise<void> {
-        return this.request<void>(`/sessions/${session}/start`, 'POST');
+        // Configure webhook to receive messages (host.docker.internal for Docker access to host)
+        const webhookUrl = 'http://host.docker.internal:3001/webhook';
+        return this.request<void>(`/sessions/${session}/start`, 'POST', {
+            name: session,
+            config: {
+                webhooks: [
+                    {
+                        url: webhookUrl,
+                        events: ['message', 'message.ack', 'session.status']
+                    }
+                ]
+            }
+        });
     }
 
     async stopSession(session: string): Promise<void> {
@@ -161,8 +173,39 @@ class WahaService {
         return this.request<void>(`/sessions/${session}/logout`, 'POST');
     }
 
+    async restartSession(session: string): Promise<void> {
+        // Configure webhook to receive messages (host.docker.internal for Docker access to host)
+        const webhookUrl = 'http://host.docker.internal:3001/webhook';
+        return this.request<void>(`/sessions/${session}/restart`, 'POST', {
+            name: session,
+            config: {
+                webhooks: [
+                    {
+                        url: webhookUrl,
+                        events: ['message', 'message.ack', 'session.status']
+                    }
+                ]
+            }
+        });
+    }
+
     async getMe(session: string): Promise<any> {
         return this.request<any>(`/sessions/${session}/me`);
+    }
+
+    // Configure webhook for an existing session
+    async configureWebhook(session: string): Promise<void> {
+        const webhookUrl = 'http://host.docker.internal:3001/webhook';
+        return this.request<void>(`/sessions/${session}`, 'PUT', {
+            config: {
+                webhooks: [
+                    {
+                        url: webhookUrl,
+                        events: ['message', 'message.ack', 'session.status']
+                    }
+                ]
+            }
+        });
     }
 
     // --- AUTH (QR Code) ---
@@ -179,9 +222,7 @@ class WahaService {
         return this.request<WahaChat[]>(`/${session}/chats`);
     }
 
-    async getChatMessages(session: string, chatId: string, limit: number = 50): Promise<WahaMessage[]> {
-        return this.request<WahaMessage[]>(`/${session}/chats/${chatId}/messages?limit=${limit}&downloadMedia=true`);
-    }
+
 
     async sendSeen(session: string, chatId: string): Promise<void> {
         return this.request<void>('/sendSeen', 'POST', { session, chatId });

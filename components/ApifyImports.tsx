@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Filter, RefreshCw, Trash2, Upload, Download, Plus, X, Check, AlertCircle, FileText, Loader, FileDown as FileDownIcon, Clock as ClockIcon, CheckCircle as CheckCircleIcon, MessageSquare, Terminal } from 'lucide-react';
+import { Search, Filter, RefreshCw, Trash2, Upload, Download, Plus, X, Check, AlertCircle, FileText, Loader, FileDown as FileDownIcon, Clock as ClockIcon, CheckCircle as CheckCircleIcon, MessageSquare, Terminal, UserX, Send, XCircle } from 'lucide-react';
 import Papa from 'papaparse';
 import { supabase } from '../supabaseClient';
 import { Lead, Source, Stage } from '../types';
@@ -19,7 +19,7 @@ export type ApifyLead = {
   city: string | null;
   state: string | null;
   source: string;
-  status: 'sent' | 'not sent' | 'error';
+  status: 'sent' | 'not sent' | 'error' | 'lost';
   created_at: string;
 };
 
@@ -30,7 +30,6 @@ type Props = {
 };
 
 export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
-  console.log('ApifyImports component loaded - Version with ClockIcon');
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
@@ -76,7 +75,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
   // Advanced Filters State
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
-    status: 'all' as 'all' | 'sent' | 'not sent' | 'error',
+    status: 'all' as 'all' | 'sent' | 'not sent' | 'error' | 'lost',
     city: '',
     state: '',
     category: '',
@@ -613,6 +612,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                           <option value="sent">Enviado</option>
                           <option value="not sent">Não Enviado</option>
                           <option value="error">Erro</option>
+                          <option value="lost">Perdido</option>
                         </select>
                       </div>
 
@@ -831,18 +831,22 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                     <td className="py-4 px-4">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide border uppercase ${item.status === 'sent'
                         ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                        : item.status === 'error'
-                          ? 'bg-red-500/10 text-red-500 border-red-500/20'
-                          : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                        : item.status === 'lost'
+                          ? 'bg-orange-500/10 text-orange-500 border-orange-500/20'
+                          : item.status === 'error'
+                            ? 'bg-red-500/10 text-red-500 border-red-500/20'
+                            : 'bg-zinc-800 text-zinc-400 border-zinc-700'
                         }`}>
                         {item.status === 'sent' ? (
-                          <CheckCircleIcon size={12} className="mr-1" />
+                          <Send size={12} className="mr-1.5" />
+                        ) : item.status === 'lost' ? (
+                          <UserX size={12} className="mr-1.5" />
                         ) : item.status === 'error' ? (
-                          <AlertCircle size={12} className="mr-1" />
+                          <XCircle size={12} className="mr-1.5" />
                         ) : (
-                          <ClockIcon size={12} className="mr-1" />
+                          <ClockIcon size={12} className="mr-1.5" />
                         )}
-                        {item.status}
+                        {item.status === 'sent' ? 'Enviado' : item.status === 'lost' ? 'Perdido' : item.status === 'not sent' ? 'Não Enviado' : item.status}
                       </span>
                     </td>
                     <td className="py-4 px-4 text-right">

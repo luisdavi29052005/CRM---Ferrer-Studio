@@ -1,5 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
+const SPLIT = '[SPLIT]';
+
 class AIHandler {
     constructor(supabase) {
         this.supabase = supabase;
@@ -11,12 +13,16 @@ class AIHandler {
             const cleanPhone = chatId.replace(/\D/g, '');
             const { data: contact } = await this.supabase
                 .from('apify')
-                .select('category, title')
+
+                .select('category, title, city, state')
                 .eq('phone', cleanPhone)
                 .maybeSingle();
 
             const category = contact?.category || 'Geral';
-            const leadName = contact?.title || senderName || 'Cliente';
+            const businessName = contact?.title || 'Cliente';
+            const leadCity = contact?.city || '';
+            const leadState = contact?.state || '';
+            const senderDisplayName = senderName || 'Cliente';
 
             console.log(`[AI Handler] Processing message from ${cleanPhone}. Category: "${category}"`);
 
@@ -81,8 +87,12 @@ class AIHandler {
                 ${agent.prompt}
 
                 CONTEXT:
-                User Name: ${leadName}
+                CONTEXT:
+                User Business/Title: ${businessName}
+                User Display Name: ${senderDisplayName}
                 User Category: ${category}
+                City: ${leadCity}
+                State: ${leadState}
                 
                 CONVERSATION HISTORY:
                 ${conversationHistory}
@@ -96,13 +106,17 @@ class AIHandler {
                 3. If the user explicitly rejects, mark as "lost".
                 4. Estimate the deal value if mentioned (or use a default based on context).
                 5. Generate a natural response for WhatsApp.
+                6. **IMPORTANT:** If you want to send multiple separate messages (e.g., a greeting first, then the question, or to create suspense), separate them with the tag '${SPLIT}'. 
+                   Example: "Oi Davi! ${SPLIT} Tudo bem? ${SPLIT} Vi que você tem interesse..."
+                   This makes the conversation feel more human.
 
                 OUTPUT FORMAT:
                 Return ONLY a JSON object with this structure:
                 {
                     "intent": "won" | "lost" | "negotiation" | "info" | "neutral",
                     "value": number (optional, estimated deal value),
-                    "response": "string (the natural text response to send)",
+                    "name": "string (extracted real name of the person, if mentioned. If not mentioned, leave null)",
+                    "response": "string (the natural text response to send. Use [SPLIT] to separate messages)",
                     "reasoning": "string (why you chose this intent)"
                 }
             `;
@@ -125,37 +139,72 @@ class AIHandler {
             console.log(`[AI Handler] Analysis: Intent=${aiOutput.intent}, Value=${aiOutput.value}`);
             console.log(`[AI Handler] Generated response: "${aiOutput.response}"`);
 
-            // 5. Send Response via WAHA
+            // 5. Send Response via WAHA (with Splitting and Typing Indicators)
             if (aiOutput.response) {
-                await this.sendResponse(chatId, aiOutput.response);
+                const messages = aiOutput.response.split(SPLIT).map(m => m.trim()).filter(m => m.length > 0);
+
+                // Mark message as seen first
+                await this.sendSeen(chatId);
+
+                for (let i = 0; i < messages.length; i++) {
+                    const msg = messages[i];
+
+                    // Start typing indicator
+                    await this.startTyping(chatId);
+
+                    // Simulate natural typing delay (roughly 50ms per character, min 1s, max 4s)
+                    const typingDelay = Math.min(Math.max(msg.length * 50, 1000), 4000);
+                    await new Promise(resolve => setTimeout(resolve, typingDelay));
+
+                    // Stop typing and send message
+                    await this.stopTyping(chatId);
+                    await this.sendResponse(chatId, msg, agent);
+
+                    // Add delay between split messages
+                    if (i < messages.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                    }
+                }
             }
 
-            // 6. Handle Lead Conversion (Won)
+            // 6. Handle Lead Conversion (Won) or Status Update
             if (aiOutput.intent === 'won') {
-                await this.convertLead(cleanPhone, leadName, category, aiOutput.value || 0, chatId);
+                // Use extracted name if available, otherwise fallback to sender name or business name
+                const finalName = aiOutput.name || senderDisplayName || businessName;
+                await this.convertLead(cleanPhone, finalName, businessName, category, leadCity, leadState, aiOutput.value || 0, chatId);
+            } else if (aiOutput.intent === 'lost') {
+                await this.updateLeadStatus(cleanPhone, 'lost');
+            } else if (aiOutput.intent === 'objection') {
+                await this.updateLeadStatus(cleanPhone, 'objection');
             }
-
-
 
         } catch (error) {
             console.error('[AI Handler] Error processing message:', error);
         }
     }
 
-    async convertLead(phone, name, category, value, chatId) {
-        console.log(`[AI Handler] CONVERTING LEAD: ${name} (${phone}) - Value: ${value}`);
+    async convertLead(phone, name, business, category, city, state, value, chatId) {
+        console.log(`[AI Handler] CONVERTING LEAD: ${name} (${phone}) - Business: ${business} - Value: ${value}`);
 
         try {
+            // Format chat_id to ensure it has @c.us suffix
+            const formattedChatId = chatId.includes('@') ? chatId : `${chatId.replace(/\D/g, '')}@c.us`;
+
             // 1. Insert into 'leads' table
             const { data: newLead, error: insertError } = await this.supabase
                 .from('leads')
                 .insert([{
-                    name: name,
+                    name: name, // Real name extracted by AI or sender name
+                    business: business, // Business name from Apify (title)
                     phone: phone,
+                    city: city,
+                    state: state,
                     category: category,
-                    status: 'won',
-                    value: value,
+                    budget: value, // Map value to budget column
+                    stage: 'Won',
+                    temperature: 'Hot',
                     source: 'AI Conversion',
+                    chat_id: formattedChatId, // Link to WhatsApp chat
                     created_at: new Date().toISOString()
                 }])
                 .select()
@@ -185,17 +234,24 @@ class AIHandler {
         }
     }
 
-    async getChatId(chatJid) {
-        const { data } = await this.supabase
-            .from('whatsapp_waha_chats')
-            .select('id')
-            .eq('chat_jid', chatJid)
-            .single();
-        return data?.id;
+    async updateLeadStatus(phone, status) {
+        console.log(`[AI Handler] Updating status for ${phone} to ${status}`);
+        try {
+            const { error } = await this.supabase
+                .from('apify')
+                .update({ status: status })
+                .eq('phone', phone);
+
+            if (error) console.error('[AI Handler] Error updating status:', error);
+        } catch (e) {
+            console.error('[AI Handler] Error in updateLeadStatus:', e);
+        }
     }
 
-    async sendResponse(chatId, text) {
+    async sendResponse(chatId, text, agent) {
         const wahaApiUrl = 'http://localhost:3000/api/sendText';
+        console.log(`[AI Handler] Sending response to ${chatId}: "${text}"`);
+
         try {
             const response = await fetch(wahaApiUrl, {
                 method: 'POST',
@@ -208,16 +264,90 @@ class AIHandler {
             });
 
             if (!response.ok) {
-                console.error(`[AI Handler] Failed to send response: ${response.statusText}`);
+                const errorText = await response.text();
+                console.error(`[AI Handler] WAHA Error (${response.status}):`, errorText);
             } else {
-                console.log(`[AI Handler] Response sent successfully to ${chatId}`);
-                // Note: The webhook will pick up this sent message and save it to DB, 
-                // so we don't strictly need to save it here, but saving it ensures consistency if webhook fails.
-                // However, let's rely on webhook for now to avoid duplication logic complexity.
+                const messageData = await response.json();
+                console.log(`[AI Handler] Response sent successfully. ID: ${messageData.id}`);
+
+                // Save to DB immediately to preserve context
+                const internalChatId = await this.getChatId(chatId);
+                if (internalChatId) {
+                    const { error: saveError } = await this.supabase
+                        .from('whatsapp_waha_messages')
+                        .upsert({
+                            chat_id: internalChatId,
+                            message_id: messageData.id || `ai-${Date.now()}`,
+                            session: 'default',
+                            from_jid: chatId, // For fromMe=true, this is usually the chat JID
+                            from_me: true,
+                            body: text,
+                            type: 'text',
+                            has_media: false,
+                            ack: 1,
+                            message_timestamp: new Date().toISOString()
+                        }, { onConflict: 'message_id' });
+
+                    if (saveError) {
+                        console.error('[AI Handler] Error saving AI response to DB:', saveError);
+                    } else {
+                        console.log('[AI Handler] AI response saved to DB.');
+                    }
+                }
             }
-        } catch (e) {
-            console.error(`[AI Handler] Network error sending response:`, e);
+        } catch (error) {
+            console.error('[AI Handler] Error sending response:', error);
         }
+    }
+
+    // WAHA Typing Indicators
+    async startTyping(chatId) {
+        try {
+            await fetch('http://localhost:3000/api/startTyping', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, session: 'default' })
+            });
+            console.log(`[AI Handler] Started typing for ${chatId}`);
+        } catch (error) {
+            console.error('[AI Handler] Error starting typing:', error);
+        }
+    }
+
+    async stopTyping(chatId) {
+        try {
+            await fetch('http://localhost:3000/api/stopTyping', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, session: 'default' })
+            });
+            console.log(`[AI Handler] Stopped typing for ${chatId}`);
+        } catch (error) {
+            console.error('[AI Handler] Error stopping typing:', error);
+        }
+    }
+
+    async sendSeen(chatId) {
+        try {
+            await fetch('http://localhost:3000/api/sendSeen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId, session: 'default' })
+            });
+            console.log(`[AI Handler] Marked as seen: ${chatId}`);
+        } catch (error) {
+            console.error('[AI Handler] Error sending seen:', error);
+        }
+    }
+
+    async getChatId(chatJid) {
+        const { data } = await this.supabase
+            .from('whatsapp_waha_chats')
+            .select('id')
+            .eq('chat_jid', chatJid)
+            .single();
+
+        return data ? data.id : null;
     }
 }
 

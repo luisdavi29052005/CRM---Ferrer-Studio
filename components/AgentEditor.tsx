@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Save, Bot, Sparkles, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { Agent } from '../types';
-import { createAgent, updateAgent, fetchApifyCategories } from '../services/supabaseService';
+import { createAgent, updateAgent, fetchApifyCategories, uploadAgentAvatar } from '../services/supabaseService';
 import { motion } from 'framer-motion';
 
 interface AgentEditorProps {
@@ -44,6 +44,27 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({ agent, onClose, onSave
         }
     }, [agent]);
 
+    const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setLoading(true);
+        try {
+            const { url, error } = await uploadAgentAvatar(file);
+            if (error) {
+                alert('Erro ao fazer upload da imagem: ' + error);
+                return;
+            }
+            if (url) {
+                setFormData(prev => ({ ...prev, avatar_url: url }));
+            }
+        } catch (error) {
+            console.error('Error uploading avatar:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleSubmit = async () => {
         if (!formData.name || !formData.model) return;
 
@@ -65,6 +86,7 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({ agent, onClose, onSave
     // const categories = ['Geral', 'Vendas', 'Suporte', 'Marketing', 'Técnico']; // Removed hardcoded
     const models = [
         { id: 'gemini-2.0-flash-exp', name: 'Gemini 2.0 Flash Experimental (Novo)' },
+        { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash (Novo)' },
         { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro (Mais Inteligente)' },
         { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash (Equilibrado)' },
         { id: 'gemini-1.5-flash-8b', name: 'Gemini 1.5 Flash-8B (Mais Rápido)' }
@@ -142,23 +164,35 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({ agent, onClose, onSave
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-xs font-medium text-zinc-500">URL do Avatar</label>
-                        <div className="flex gap-3">
+                        <label className="text-xs font-medium text-zinc-500">Avatar</label>
+                        <div className="flex items-center gap-4">
+                            <div
+                                onClick={() => document.getElementById('avatar-upload')?.click()}
+                                className="w-16 h-16 rounded-full bg-black/20 border border-white/10 flex items-center justify-center overflow-hidden cursor-pointer hover:border-white/30 transition-all group relative"
+                            >
+                                {formData.avatar_url ? (
+                                    <>
+                                        <img src={formData.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
+                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <ImageIcon size={20} className="text-white" />
+                                        </div>
+                                    </>
+                                ) : (
+                                    <ImageIcon size={24} className="text-zinc-700 group-hover:text-zinc-500 transition-colors" />
+                                )}
+                            </div>
                             <div className="flex-1">
                                 <input
-                                    type="text"
-                                    value={formData.avatar_url}
-                                    onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
-                                    placeholder="https://..."
-                                    className="w-full bg-black/20 border border-white/10 text-zinc-200 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 transition-all placeholder:text-zinc-700 text-sm hover:border-white/20"
+                                    id="avatar-upload"
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleAvatarUpload}
+                                    className="hidden"
                                 />
-                            </div>
-                            <div className="w-10 h-10 rounded-full bg-black/20 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
-                                {formData.avatar_url ? (
-                                    <img src={formData.avatar_url} alt="Avatar" className="w-full h-full object-cover" />
-                                ) : (
-                                    <ImageIcon size={16} className="text-zinc-700" />
-                                )}
+                                <div className="text-xs text-zinc-500">
+                                    <p className="font-medium text-zinc-400 mb-1">Clique na imagem para alterar</p>
+                                    <p>Recomendado: 400x400px (JPG, PNG)</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -224,6 +258,21 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({ agent, onClose, onSave
                         </div>
                     </div>
                 </div>
+
+                <div className="flex items-center justify-between pt-2">
+                    <div className="space-y-0.5">
+                        <label className="text-xs font-medium text-zinc-500">Humanizar Mensagens</label>
+                        <p className="text-[10px] text-zinc-600">Divide textos longos em múltiplas mensagens</p>
+                    </div>
+                    <button
+                        onClick={() => setFormData({ ...formData, split_messages: !formData.split_messages })}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-500/50 focus:ring-offset-2 focus:ring-offset-black ${formData.split_messages ? 'bg-zinc-200' : 'bg-zinc-800'}`}
+                    >
+                        <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-black transition-transform ${formData.split_messages ? 'translate-x-6' : 'translate-x-1'}`}
+                        />
+                    </button>
+                </div>
             </div>
 
             {/* Footer */}
@@ -257,6 +306,6 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({ agent, onClose, onSave
                     </button>
                 </div>
             </div>
-        </motion.div>
+        </motion.div >
     );
 };
