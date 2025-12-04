@@ -15,7 +15,7 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
         <div className="w-80 h-full flex flex-col bg-[#09090b] border-l border-zinc-900 animate-in slide-in-from-right duration-300">
             {/* Header */}
             <div className="p-6 flex items-center justify-between shrink-0">
-                <h3 className="text-lg font-bold text-zinc-100 tracking-tight">Contact Info</h3>
+                <h3 className="text-lg font-bold text-zinc-100 tracking-tight">Informações de Contato</h3>
                 <button
                     onClick={onClose}
                     className="p-2 hover:bg-zinc-900 rounded-lg text-zinc-400 hover:text-zinc-200 transition-colors"
@@ -41,7 +41,7 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
                 {/* AI Score Card - Minimalist */}
                 <div className="bg-zinc-900/30 rounded-xl p-4">
                     <div className="flex items-center justify-between mb-3">
-                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Lead Score</span>
+                        <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Pontuação do Lead</span>
                         <BrainCircuit size={14} className="text-bronze-500" />
                     </div>
                     <div className="flex items-end gap-2 mb-3">
@@ -62,15 +62,15 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
                         <div className="flex items-start gap-4">
                             <User size={16} className="text-zinc-600 mt-0.5" />
                             <div>
-                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider mb-1">Contact Name</p>
-                                <p className="text-sm font-medium text-zinc-200">{lead.name || 'Unknown'}</p>
+                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider mb-1">Nome do Contato</p>
+                                <p className="text-sm font-medium text-zinc-200">{lead.name || 'Desconhecido'}</p>
                             </div>
                         </div>
 
                         <div className="flex items-start gap-4">
                             <Phone size={16} className="text-zinc-600 mt-0.5" />
                             <div>
-                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider mb-1">Phone</p>
+                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider mb-1">Telefone</p>
                                 <p className="text-sm font-medium text-zinc-200 font-mono">{lead.phone}</p>
                             </div>
                         </div>
@@ -78,15 +78,15 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
                         <div className="flex items-start gap-4">
                             <MapPin size={16} className="text-zinc-600 mt-0.5" />
                             <div>
-                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider mb-1">Location</p>
-                                <p className="text-sm font-medium text-zinc-200">{lead.city || 'Unknown'}</p>
+                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider mb-1">Localização</p>
+                                <p className="text-sm font-medium text-zinc-200">{lead.city || 'Desconhecido'}</p>
                             </div>
                         </div>
 
                         <div className="flex items-start gap-4">
                             <Calendar size={16} className="text-zinc-600 mt-0.5" />
                             <div>
-                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider mb-1">Last Interaction</p>
+                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider mb-1">Última Interação</p>
                                 <p className="text-sm font-medium text-zinc-200">{lead.last_interaction}</p>
                             </div>
                         </div>
@@ -123,13 +123,13 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                                 <FileText size={14} className="text-zinc-600" />
-                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">Notes</p>
+                                <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider">Notas</p>
                             </div>
-                            <button className="text-[10px] font-bold text-bronze-500 hover:text-bronze-400 transition-colors uppercase tracking-wide">Edit</button>
+                            <button className="text-[10px] font-bold text-bronze-500 hover:text-bronze-400 transition-colors uppercase tracking-wide">Editar</button>
                         </div>
                         <div className="bg-zinc-900/30 rounded-lg p-3">
                             <p className="text-xs text-zinc-400 leading-relaxed italic">
-                                {lead.notes || "No notes added yet."}
+                                {lead.notes || "Nenhuma nota adicionada ainda."}
                             </p>
                         </div>
                     </div>

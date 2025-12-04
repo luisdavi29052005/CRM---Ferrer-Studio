@@ -27,8 +27,8 @@ export const ImportProgress: React.FC<ImportProgressProps> = ({ isOpen, progress
                                     <Loader2 className="text-bronze-500 animate-spin" size={16} />
                                 </div>
                                 <div className="flex flex-col">
-                                    <span className="text-sm font-medium text-zinc-100">Importing Leads...</span>
-                                    <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Please wait</span>
+                                    <span className="text-sm font-medium text-zinc-100">Importando Leads...</span>
+                                    <span className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider">Por favor, aguarde</span>
                                 </div>
                             </div>
                             <div className="flex items-center gap-1">
@@ -47,7 +47,7 @@ export const ImportProgress: React.FC<ImportProgressProps> = ({ isOpen, progress
 
                         <div className="space-y-1.5">
                             <div className="flex justify-between text-[10px] font-medium uppercase tracking-wider text-zinc-500">
-                                <span>Progress</span>
+                                <span>Progresso</span>
                                 <span>{progress}%</span>
                             </div>
                             <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">

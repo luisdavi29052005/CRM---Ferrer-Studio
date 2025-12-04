@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, Navigate, useLocation, useNavigate, BrowserRouter as Router } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Users, MessageSquare, Database, Zap, Bell, ChevronDown, Activity, ArrowRight, Lock, Mail, LogOut, Settings as SettingsIcon, User, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Users, MessageSquare, Database, Zap, Bell, ChevronDown, Activity, ArrowRight, Lock, Mail, LogOut, Settings as SettingsIcon, User, Menu, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Dashboard } from './components/Dashboard';
 import { Leads } from './components/Leads';
@@ -41,7 +41,7 @@ const LoginScreen: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      setError('Please enter both email and password.');
+      setError('Por favor, insira o email e a senha.');
       return;
     }
     setLoading(true);
@@ -66,7 +66,7 @@ const LoginScreen: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         // For this dev environment, assuming auto-confirm is OFF usually, but let's see.
         // If session is null, tell user to check email.
         if (!signUpData.session) {
-          setError('Account created! Please check your email to confirm.');
+          setError('Conta criada! Por favor, verifique seu email para confirmar.');
           setLoading(false);
           return;
         }
@@ -77,17 +77,17 @@ const LoginScreen: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
         // Check profile status
         const profile = await authActions.getCurrentProfile();
         if (profile && profile.status === 'pending') {
-          setError('Your account is pending approval by an admin.');
+          setError('Sua conta está aguardando aprovação de um administrador.');
           await authActions.signOut();
         } else if (profile && profile.status === 'blocked') {
-          setError('Access denied.');
+          setError('Acesso negado.');
           await authActions.signOut();
         } else {
           onLogin();
         }
       }
     } catch (err: any) {
-      setError(err.message || 'An unexpected error occurred.');
+      setError(err.message || 'Ocorreu um erro inesperado.');
     } finally {
       setLoading(false);
     }
@@ -238,6 +238,7 @@ const App = () => {
   const [userRole, setUserRole] = useState<string>('User');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const checkUser = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -246,7 +247,7 @@ const App = () => {
       if (profile) {
         setUserName(profile.full_name || session.user.email?.split('@')[0] || 'User');
         setUserAvatar(profile.avatar_url || session.user.user_metadata.avatar_url || `https://ui-avatars.com/api/?name=${profile.full_name}&background=random`);
-        setUserRole(profile.role === 'admin' ? 'Administrator' : 'Team Member');
+        setUserRole(profile.role === 'admin' ? 'Administrador' : 'Membro da Equipe');
         setUserId(profile.id);
       }
     }
@@ -297,7 +298,7 @@ const App = () => {
           const profile = await authActions.getCurrentProfile(session.user.id);
 
           if (profile) {
-            setUserRole(profile.role === 'admin' ? 'Administrator' : 'Team Member');
+            setUserRole(profile.role === 'admin' ? 'Administrador' : 'Membro da Equipe');
 
             // Sync Avatar URL to Profile if different
             if (avatarUrl && profile.avatar_url !== avatarUrl) {
@@ -307,7 +308,7 @@ const App = () => {
             if (profile.status === 'blocked') {
               await authActions.signOut();
               setIsAuthenticated(false);
-              alert("Access Denied: Your account is blocked.");
+              alert("Acesso Negado: Sua conta está bloqueada.");
             } else if (profile.status === 'pending') {
               setIsPending(true);
               setIsAuthenticated(false);
@@ -396,7 +397,8 @@ const App = () => {
             },
             last_text: c.last_text,
             last_timestamp: c.last_timestamp,
-            status: 'read'
+            status: 'read',
+            _persisted: true
           }));
 
           const chatMap = new Map<string, WahaChat>();
@@ -425,7 +427,7 @@ const App = () => {
                   unreadCount: 0,
                   isGroup: false,
                   lead: lead,
-                  last_text: 'Start a conversation',
+                  last_text: 'Iniciar uma conversa',
                   status: 'read'
                 } as WahaChat);
               }
@@ -511,45 +513,7 @@ const App = () => {
     }
   }, [isAuthenticated]);
 
-  // Prefetch Profile Pictures
-  const [profilePics, setProfilePics] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    const fetchImages = async () => {
-      const newPics: Record<string, string> = {};
-      const uniqueChatIds = Array.from(new Set(wahaChats.map(c => c.id)));
-
-      leads.forEach(l => {
-        if (l.chat_id) uniqueChatIds.push(l.chat_id);
-        else if (l.phone) uniqueChatIds.push(`${l.phone}@c.us`);
-      });
-
-      const uniqueIds = Array.from(new Set(uniqueChatIds));
-
-      const batchSize = 5;
-      for (let i = 0; i < uniqueIds.length; i += batchSize) {
-        const batch = uniqueIds.slice(i, i + batchSize);
-        await Promise.all(batch.map(async (chatId) => {
-          if (!profilePics[chatId]) {
-            try {
-              const url = await fetchContactProfilePic(chatId);
-              if (url) {
-                newPics[chatId] = url;
-              }
-            } catch (e) { }
-          }
-        }));
-      }
-
-      if (Object.keys(newPics).length > 0) {
-        setProfilePics(prev => ({ ...prev, ...newPics }));
-      }
-    };
-
-    if (wahaChats.length > 0 || leads.length > 0) {
-      fetchImages();
-    }
-  }, [wahaChats, leads]);
 
   const handleOpenChat = (lead: Lead) => {
     setSelectedLeadForChat(lead.chat_id);
@@ -603,13 +567,23 @@ const App = () => {
         className={`w-full flex items-center gap-4 px-4 py-3 text-sm font-medium transition-all duration-300 group relative ${isActive
           ? 'text-zinc-100'
           : 'text-zinc-500 hover:text-zinc-300'
-          }`}
+          } ${isCollapsed ? 'justify-center px-2' : ''}`}
+        title={isCollapsed ? label : ''}
       >
         {isActive && (
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)]"></div>
+          <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-6 bg-zinc-100 rounded-r-full shadow-[0_0_10px_rgba(255,255,255,0.3)] ${isCollapsed ? 'h-4' : ''}`}></div>
         )}
-        <Icon strokeWidth={1.5} size={18} className={`transition-transform duration-300 ${isActive ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
-        <span className="tracking-wide whitespace-nowrap">{label}</span>
+        <Icon strokeWidth={1.5} size={20} className={`transition-transform duration-300 ${isActive ? 'text-zinc-100 scale-105' : 'group-hover:scale-105'}`} />
+        {!isCollapsed && (
+          <motion.span
+            initial={{ opacity: 0, width: 0 }}
+            animate={{ opacity: 1, width: 'auto' }}
+            exit={{ opacity: 0, width: 0 }}
+            className="tracking-wide whitespace-nowrap overflow-hidden"
+          >
+            {label}
+          </motion.span>
+        )}
       </button>
     );
   };
@@ -680,17 +654,36 @@ const App = () => {
               </AnimatePresence>
 
               {/* Minimalist Dark Sidebar */}
-              <aside className={`
-                fixed md:static inset-y-0 left-0 z-40 w-64 h-full flex flex-col bg-black/95 md:bg-black/40 border-r border-white/5 backdrop-blur-xl transition-transform duration-300 ease-in-out
-                ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+              <motion.aside
+                initial={false}
+                animate={{ width: isCollapsed ? 80 : 256 }}
+                className={`
+                fixed md:static inset-y-0 left-0 z-40 h-full flex flex-col bg-black/95 md:bg-black/40 border-r border-white/5 backdrop-blur-xl transition-all duration-300 ease-in-out
+                ${isSidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full md:translate-x-0'}
               `}>
-                <div className="p-6">
+                <div className={`p-6 ${isCollapsed ? 'px-2' : ''}`}>
                   {/* Premium Logo Area */}
-                  <div className="flex items-center justify-between mb-12 pl-2">
-                    <div className="flex flex-col">
-                      <span className="font-bold tracking-tighter text-zinc-100 text-lg leading-none">FERRER</span>
-                      <span className="text-[10px] text-zinc-500 font-medium tracking-[0.3em] uppercase mt-1">Studio</span>
+                  <div className={`flex items-center mb-12 ${isCollapsed ? 'justify-center flex-col gap-4' : 'justify-between pl-2'}`}>
+                    <div className="flex flex-col items-center">
+                      {isCollapsed ? (
+                        <span className="font-bold tracking-tighter text-zinc-100 text-xl leading-none">F</span>
+                      ) : (
+                        <>
+                          <span className="font-bold tracking-tighter text-zinc-100 text-lg leading-none">FERRER</span>
+                          <span className="text-[10px] text-zinc-500 font-medium tracking-[0.3em] uppercase mt-1">Studio</span>
+                        </>
+                      )}
                     </div>
+
+                    {/* Desktop Collapse Toggle */}
+                    <button
+                      onClick={() => setIsCollapsed(!isCollapsed)}
+                      className={`hidden md:flex p-1.5 rounded-lg hover:bg-white/5 text-zinc-500 hover:text-zinc-300 transition-colors ${isCollapsed ? 'mt-2' : ''}`}
+                    >
+                      {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                    </button>
+
+                    {/* Mobile Close */}
                     <button
                       onClick={() => setIsSidebarOpen(false)}
                       className="md:hidden p-1 text-zinc-500 hover:text-zinc-300"
@@ -710,26 +703,30 @@ const App = () => {
                       <>
                         <div className="my-8 border-t border-white/5 mx-4"></div>
                         <SidebarItem path="/users" icon={Users} label={t('sidebar.team')} />
-                        <SidebarItem path="/system-settings" icon={SettingsIcon} label={t('sidebar.system_settings') || 'System Settings'} />
+                        <SidebarItem path="/system-settings" icon={SettingsIcon} label={t('sidebar.system_settings') || 'Configurações do Sistema'} />
                       </>
                     )}
                   </nav>
                 </div>
 
-                <div className="mt-auto p-6">
+                <div className={`mt-auto p-6 ${isCollapsed ? 'px-2' : ''}`}>
                   <div className="relative">
                     <button
                       onClick={() => setIsProfileOpen(!isProfileOpen)}
-                      className="w-full flex items-center gap-3 pl-2 pr-1 py-1 rounded-full hover:bg-white/5 transition-all duration-200 group border border-transparent hover:border-white/5"
+                      className={`w-full flex items-center gap-3 py-1 rounded-full hover:bg-white/5 transition-all duration-200 group border border-transparent hover:border-white/5 ${isCollapsed ? 'justify-center px-0' : 'pl-2 pr-1'}`}
                     >
                       <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 ring-1 ring-white/10 group-hover:ring-white/20 transition-all overflow-hidden shadow-lg flex-shrink-0">
                         <img src={userAvatar} alt="User" className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" />
                       </div>
-                      <div className="flex flex-col items-start mr-auto overflow-hidden">
-                        <span className="text-xs font-medium text-zinc-200 leading-none mb-0.5 truncate w-full text-left">{userName}</span>
-                        <span className="text-[9px] text-zinc-600 font-medium leading-none mt-0.5 uppercase tracking-wider">{userRole}</span>
-                      </div>
-                      <ChevronDown size={12} className={`text-zinc-500 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
+                      {!isCollapsed && (
+                        <>
+                          <div className="flex flex-col items-start mr-auto overflow-hidden">
+                            <span className="text-xs font-medium text-zinc-200 leading-none mb-0.5 truncate w-full text-left">{userName}</span>
+                            <span className="text-[9px] text-zinc-600 font-medium leading-none mt-0.5 uppercase tracking-wider">{userRole}</span>
+                          </div>
+                          <ChevronDown size={12} className={`text-zinc-500 transition-transform duration-200 ${isProfileOpen ? 'rotate-180' : ''}`} />
+                        </>
+                      )}
                     </button>
 
                     {/* Profile Dropdown */}
@@ -795,7 +792,7 @@ const App = () => {
                     </AnimatePresence>
                   </div>
                 </div>
-              </aside>
+              </motion.aside>
 
               {/* Main Content */}
               <main className="flex-1 flex flex-col min-w-0 h-full relative z-10">
@@ -870,7 +867,7 @@ const App = () => {
                               key={selectedLeadForChat} // Force remount if selected lead changes? Maybe better to handle inside Chat
                               onConnectClick={() => setIsQRModalOpen(true)}
                               isAdmin={isAdmin}
-                              profilePics={profilePics}
+                              profilePics={{}} // Handled internally by Chat
                               isLoading={isLoadingData}
                               onNavigate={(path) => navigate(path)}
                             />

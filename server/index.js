@@ -3,6 +3,7 @@ const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config({ path: '../.env' });
 const BlastService = require('./blastService');
+const AIHandler = require('./aiHandler');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -18,6 +19,7 @@ if (!supabaseUrl || !supabaseKey) {
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 const blastService = new BlastService(supabase);
+const aiHandler = new AIHandler(supabase);
 
 app.use(cors());
 app.use(express.json());
@@ -89,43 +91,40 @@ app.post('/webhook', async (req, res) => {
                 chatUpdateData.name = finalName;
             }
 
-            const { data: upsertedChat, error: chatError } = await supabase
-                .from('whatsapp_waha_chats')
-                .upsert(chatUpdateData, { onConflict: 'chat_jid' })
-                .select()
-                .single();
+            if (chatId) {
+                const { error: messageError } = await supabase
+                    .from('whatsapp_waha_messages')
+                    .upsert({
+                        chat_id: chatId,
+                        message_id: payload.id,
+                        session: data.session,
+                        from_jid: payload.from,
+                        from_me: isFromMe,
+                        body: payload.body,
+                        type: payload._data?.Info?.Type || 'text',
+                        has_media: payload.hasMedia,
+                        ack: payload.ack,
+                        message_timestamp: new Date(payload.timestamp * 1000).toISOString(),
+                        raw: data // Store the full raw webhook data
+                    }, { onConflict: 'message_id' });
 
-            if (chatError) {
-                console.error('Error upserting chat:', chatError);
-            } else {
-                // 2. Insert Message
-                const chatId = upsertedChat ? upsertedChat.id : existingChat?.id;
-
-                if (chatId) {
-                    const { error: messageError } = await supabase
-                        .from('whatsapp_waha_messages')
-                        .upsert({
-                            chat_id: chatId,
-                            message_id: payload.id,
-                            session: data.session,
-                            from_jid: payload.from,
-                            from_me: isFromMe,
-                            body: payload.body,
-                            type: payload._data?.Info?.Type || 'text',
-                            has_media: payload.hasMedia,
-                            ack: payload.ack,
-                            message_timestamp: new Date(payload.timestamp * 1000).toISOString(),
-                            raw: data // Store the full raw webhook data
-                        }, { onConflict: 'message_id' });
-
-                    if (messageError) {
-                        console.error('Error inserting message:', messageError);
-                    } else {
-                        console.log('Message inserted successfully');
-                    }
+                if (messageError) {
+                    console.error('Error inserting message:', messageError);
                 } else {
-                    console.error('Could not determine chat ID for message insertion');
+                    console.log('Message inserted successfully');
+
+                    // --- AI AGENT TRIGGER ---
+                    // Only trigger if message is NOT from me and is text
+                    if (!isFromMe && payload.body) {
+                        // Run asynchronously to not block webhook response
+                        aiHandler.processMessage(chatJid, payload.body, finalName).catch(err => {
+                            console.error('Error in AI Handler:', err);
+                        });
+                    }
+                    // ------------------------
                 }
+            } else {
+                console.error('Could not determine chat ID for message insertion');
             }
         }
     } catch (err) {

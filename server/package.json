@@ -8,6 +8,7 @@
         "dev": "nodemon index.js"
     },
     "dependencies": {
+        "@google/generative-ai": "^0.24.1",
         "@supabase/supabase-js": "^2.86.0",
         "apify-client": "^2.20.0",
         "cors": "^2.8.5",

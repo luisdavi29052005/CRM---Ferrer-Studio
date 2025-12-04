@@ -32,13 +32,13 @@ export const DashboardLeads: React.FC<DashboardLeadsProps> = ({ leads, chartData
         const now = new Date();
         const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-        if (seconds < 60) return 'Just now';
+        if (seconds < 60) return 'Agora mesmo';
         const minutes = Math.floor(seconds / 60);
-        if (minutes < 60) return `${minutes}m ago`;
+        if (minutes < 60) return `${minutes}m atrás`;
         const hours = Math.floor(minutes / 60);
-        if (hours < 24) return `${hours}h ago`;
+        if (hours < 24) return `${hours}h atrás`;
         const days = Math.floor(hours / 24);
-        return `${days}d ago`;
+        return `${days}d atrás`;
     };
 
     const getActivityIcon = (type: ActivityItem['type']) => {
@@ -63,7 +63,7 @@ export const DashboardLeads: React.FC<DashboardLeadsProps> = ({ leads, chartData
                     </div>
                     <div className="flex items-baseline gap-2">
                         <span className="text-4xl font-bold text-zinc-100 tracking-tight">{totalLeads}</span>
-                        <span className="text-xs text-zinc-500 font-medium">Active</span>
+                        <span className="text-xs text-zinc-500 font-medium">Ativos</span>
                     </div>
                 </div>
 
@@ -76,7 +76,7 @@ export const DashboardLeads: React.FC<DashboardLeadsProps> = ({ leads, chartData
                     </div>
                     <div className="flex items-baseline gap-2">
                         <span className="text-4xl font-bold text-zinc-100 tracking-tight">{responseRate}%</span>
-                        <span className="text-xs text-zinc-500 font-medium">Avg</span>
+                        <span className="text-xs text-zinc-500 font-medium">Méd</span>
                     </div>
                 </div>
             </div>
@@ -85,11 +85,11 @@ export const DashboardLeads: React.FC<DashboardLeadsProps> = ({ leads, chartData
                 {/* Outbound Performance Chart */}
                 <div className="lg:col-span-2 flex flex-col min-h-0">
                     <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
-                        <h3 className="text-xl font-bold text-zinc-100 tracking-tight">Outbound Performance</h3>
+                        <h3 className="text-xl font-bold text-zinc-100 tracking-tight">Desempenho de Saída</h3>
                         <div className="flex gap-4">
                             <div className="flex items-center gap-2 text-xs text-zinc-500">
-                                <span className="w-2 h-2 rounded-full bg-bronze-500"></span> Sent
-                                <span className="w-2 h-2 rounded-full bg-olive-500 ml-2"></span> Replies
+                                <span className="w-2 h-2 rounded-full bg-bronze-500"></span> Enviados
+                                <span className="w-2 h-2 rounded-full bg-olive-500 ml-2"></span> Respostas
                             </div>
                         </div>
                     </div>
@@ -151,7 +151,7 @@ export const DashboardLeads: React.FC<DashboardLeadsProps> = ({ leads, chartData
                 {/* Live Activity */}
                 <div className="flex flex-col min-h-0">
                     <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
-                        <h3 className="text-xl font-bold text-zinc-100 tracking-tight">Live Activity</h3>
+                        <h3 className="text-xl font-bold text-zinc-100 tracking-tight">Atividade em Tempo Real</h3>
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
                     </div>
 
@@ -176,7 +176,7 @@ export const DashboardLeads: React.FC<DashboardLeadsProps> = ({ leads, chartData
                                 ))
                             ) : (
                                 <div className="text-center py-8">
-                                    <p className="text-zinc-600 text-sm">No recent activity.</p>
+                                    <p className="text-zinc-600 text-sm">Nenhuma atividade recente.</p>
                                 </div>
                             )}
                         </div>

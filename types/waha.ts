@@ -36,6 +36,7 @@ export interface WahaChat {
     last_text?: string;
     last_from_me?: boolean;
     last_timestamp?: number;
+    _persisted?: boolean; // Internal flag to indicate if chat is in DB
 }
 
 export interface WahaMessage {

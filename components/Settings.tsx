@@ -42,7 +42,7 @@ export const Settings: React.FC<SettingsProps> = ({ user, wahaStatus, onUpdatePr
             onUpdateProfile();
             setSuccess(t('settings.profile_updated'));
         } catch (err: any) {
-            setError(err.message || 'Failed to update profile');
+            setError(err.message || 'Falha ao atualizar perfil');
         } finally {
             setLoading(false);
         }
@@ -55,7 +55,6 @@ export const Settings: React.FC<SettingsProps> = ({ user, wahaStatus, onUpdatePr
 
     const tabs = [
         { id: 'account', label: t('settings.tabs.account'), icon: User },
-        { id: 'general', label: t('settings.tabs.general'), icon: Globe },
         { id: 'general', label: t('settings.tabs.general'), icon: Globe },
     ];
 

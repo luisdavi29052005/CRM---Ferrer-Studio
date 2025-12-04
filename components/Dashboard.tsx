@@ -36,7 +36,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ leads, chartData, activity
             : 'text-zinc-500 hover:text-zinc-300'
             }`}
         >
-          Finances
+          Finanças
           {activeTab === 'finances' && (
             <motion.div
               layoutId="activeTab"

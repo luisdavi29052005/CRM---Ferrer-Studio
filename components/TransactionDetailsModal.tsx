@@ -34,7 +34,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
             setOrderDetails(data);
         } catch (err: any) {
             console.error('Failed to fetch transaction details:', err);
-            setError(err.message || 'Failed to load transaction details. Please try again.');
+            setError(err.message || 'Falha ao carregar detalhes da transação. Por favor, tente novamente.');
         } finally {
             setLoading(false);
         }
@@ -61,7 +61,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                 <div className="flex items-center justify-between p-6 border-b border-white/5 bg-white/[0.02]">
                     <div className="flex items-center gap-3">
                         <div>
-                            <h2 className="text-lg font-semibold text-zinc-100">Transaction Details</h2>
+                            <h2 className="text-lg font-semibold text-zinc-100">Detalhes da Transação</h2>
                             <p className="text-xs text-zinc-500 font-mono mt-0.5">{transactionId}</p>
                         </div>
                     </div>
@@ -83,7 +83,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                 onClick={fetchDetails}
                                 className="px-4 py-2 text-xs font-medium bg-rose-500/10 border border-rose-500/20 rounded-lg hover:bg-rose-500/20 transition-colors mt-2"
                             >
-                                Retry
+                                Tentar Novamente
                             </button>
                         </div>
                     ) : (
@@ -103,7 +103,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                     )}
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
-                                    <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Total Amount</span>
+                                    <span className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Valor Total</span>
                                     {loading ? (
                                         <Skeleton className="h-7 w-32" />
                                     ) : (
@@ -119,11 +119,11 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                 {/* Customer Info */}
                                 <div className="space-y-4">
                                     <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2 pb-2 border-b border-white/5">
-                                        <User size={14} strokeWidth={1.5} /> Customer Information
+                                        <User size={14} strokeWidth={1.5} /> Informações do Cliente
                                     </h3>
                                     <div className="space-y-3">
                                         <div>
-                                            <p className="text-xs text-zinc-500 mb-1">Name</p>
+                                            <p className="text-xs text-zinc-500 mb-1">Nome</p>
                                             {loading ? <Skeleton className="h-5 w-40" /> : (
                                                 <p className="text-sm text-zinc-200 font-medium">
                                                     {orderDetails?.payer?.name?.given_name} {orderDetails?.payer?.name?.surname}
@@ -138,13 +138,13 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
-                                                <p className="text-xs text-zinc-500 mb-1">Payer ID</p>
+                                                <p className="text-xs text-zinc-500 mb-1">ID do Pagador</p>
                                                 {loading ? <Skeleton className="h-4 w-24" /> : (
                                                     <p className="text-sm text-zinc-200 font-mono text-xs">{orderDetails?.payer?.payer_id}</p>
                                                 )}
                                             </div>
                                             <div>
-                                                <p className="text-xs text-zinc-500 mb-1">Country</p>
+                                                <p className="text-xs text-zinc-500 mb-1">País</p>
                                                 {loading ? <Skeleton className="h-4 w-8" /> : (
                                                     <p className="text-sm text-zinc-200">{orderDetails?.payer?.address?.country_code}</p>
                                                 )}
@@ -152,7 +152,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                         </div>
                                         {(loading || orderDetails?.payer?.phone?.phone_number?.national_number || orderDetails?.payment_source?.paypal?.phone_number?.national_number) && (
                                             <div>
-                                                <p className="text-xs text-zinc-500 mb-1">Phone</p>
+                                                <p className="text-xs text-zinc-500 mb-1">Telefone</p>
                                                 {loading ? <Skeleton className="h-5 w-32" /> : (
                                                     <p className="text-sm text-zinc-200">
                                                         {orderDetails?.payer?.phone?.phone_number?.national_number || orderDetails?.payment_source?.paypal?.phone_number?.national_number}
@@ -162,7 +162,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                         )}
                                         {(loading || orderDetails?.payment_source?.paypal?.account_status) && (
                                             <div>
-                                                <p className="text-xs text-zinc-500 mb-1">Account Status</p>
+                                                <p className="text-xs text-zinc-500 mb-1">Status da Conta</p>
                                                 {loading ? <Skeleton className="h-5 w-20" /> : (
                                                     <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${orderDetails?.payment_source?.paypal?.account_status === 'VERIFIED'
                                                         ? 'bg-emerald-500/10 text-emerald-400'
@@ -179,7 +179,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                 {/* Shipping Info */}
                                 <div className="space-y-4">
                                     <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2 pb-2 border-b border-white/5">
-                                        <MapPin size={14} strokeWidth={1.5} /> Shipping Address
+                                        <MapPin size={14} strokeWidth={1.5} /> Endereço de Entrega
                                     </h3>
                                     {loading ? (
                                         <div className="space-y-2">
@@ -204,14 +204,14 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                             </p>
                                         </div>
                                     ) : (
-                                        <p className="text-sm text-zinc-500 italic">No shipping information available</p>
+                                        <p className="text-sm text-zinc-500 italic">Nenhuma informação de entrega disponível</p>
                                     )}
 
                                     {/* Additional Order Info */}
                                     <div className="pt-4 mt-4 border-t border-white/5 space-y-3">
                                         {(loading || orderDetails?.purchase_units?.[0]?.description) && (
                                             <div>
-                                                <p className="text-xs text-zinc-500 mb-1">Description</p>
+                                                <p className="text-xs text-zinc-500 mb-1">Descrição</p>
                                                 {loading ? <Skeleton className="h-4 w-full" /> : (
                                                     <p className="text-sm text-zinc-300 italic">"{orderDetails?.purchase_units?.[0]?.description}"</p>
                                                 )}
@@ -219,7 +219,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                         )}
                                         {(loading || orderDetails?.purchase_units?.[0]?.invoice_id) && (
                                             <div>
-                                                <p className="text-xs text-zinc-500 mb-1">Invoice ID</p>
+                                                <p className="text-xs text-zinc-500 mb-1">ID da Fatura</p>
                                                 {loading ? <Skeleton className="h-4 w-32" /> : (
                                                     <p className="text-sm text-zinc-300 font-mono">{orderDetails?.purchase_units?.[0]?.invoice_id}</p>
                                                 )}
@@ -227,7 +227,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                         )}
                                         {(loading || orderDetails?.purchase_units?.[0]?.soft_descriptor) && (
                                             <div>
-                                                <p className="text-xs text-zinc-500 mb-1">Soft Descriptor</p>
+                                                <p className="text-xs text-zinc-500 mb-1">Descritor</p>
                                                 {loading ? <Skeleton className="h-4 w-40" /> : (
                                                     <p className="text-sm text-zinc-300">{orderDetails?.purchase_units?.[0]?.soft_descriptor}</p>
                                                 )}
@@ -235,7 +235,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                         )}
                                         {(loading || orderDetails?._capture_details?.seller_protection?.status) && (
                                             <div>
-                                                <p className="text-xs text-zinc-500 mb-1">Seller Protection</p>
+                                                <p className="text-xs text-zinc-500 mb-1">Proteção ao Vendedor</p>
                                                 {loading ? <Skeleton className="h-5 w-24" /> : (
                                                     <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${orderDetails?._capture_details?.seller_protection?.status === 'ELIGIBLE'
                                                         ? 'bg-blue-500/10 text-blue-400'
@@ -253,7 +253,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                             {/* Items */}
                             <div className="space-y-4">
                                 <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2 pb-2 border-b border-white/5">
-                                    <Package size={14} strokeWidth={1.5} /> Order Items
+                                    <Package size={14} strokeWidth={1.5} /> Itens do Pedido
                                 </h3>
                                 {loading ? (
                                     <div className="space-y-2">
@@ -271,7 +271,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                             <div key={index} className="flex justify-between items-start py-2 border-b border-white/5 last:border-0">
                                                 <div>
                                                     <p className="text-sm font-medium text-zinc-200">{item.name}</p>
-                                                    <p className="text-xs text-zinc-500">Qty: {item.quantity}</p>
+                                                    <p className="text-xs text-zinc-500">Qtd: {item.quantity}</p>
                                                 </div>
                                                 <p className="text-sm font-medium text-zinc-200">
                                                     {formatCurrency(item.unit_amount.value, item.unit_amount.currency_code)}
@@ -280,18 +280,18 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                         ))}
                                     </div>
                                 ) : (
-                                    <p className="text-sm text-zinc-500 italic">No item details available</p>
+                                    <p className="text-sm text-zinc-500 italic">Nenhum detalhe do item disponível</p>
                                 )}
                             </div>
 
                             {/* Financial Breakdown */}
                             <div className="space-y-4">
                                 <h3 className="text-sm font-medium text-zinc-400 flex items-center gap-2 pb-2 border-b border-white/5">
-                                    <CreditCard size={14} strokeWidth={1.5} /> Financial Breakdown
+                                    <CreditCard size={14} strokeWidth={1.5} /> Detalhamento Financeiro
                                 </h3>
                                 <div className="space-y-2">
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-zinc-400">Gross Amount</span>
+                                        <span className="text-zinc-400">Valor Bruto</span>
                                         {loading ? <Skeleton className="h-4 w-24" /> : (
                                             <span className="text-zinc-200">
                                                 {orderDetails?._capture_details?.seller_receivable_breakdown?.gross_amount ?
@@ -308,7 +308,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                         )}
                                     </div>
                                     <div className="flex justify-between text-sm">
-                                        <span className="text-zinc-400">PayPal Fee</span>
+                                        <span className="text-zinc-400">Taxa PayPal</span>
                                         {loading ? <Skeleton className="h-4 w-20" /> : (
                                             <span className="text-rose-400">
                                                 {orderDetails?._capture_details?.seller_receivable_breakdown?.paypal_fee ?
@@ -325,7 +325,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                         )}
                                     </div>
                                     <div className="pt-2 mt-2 border-t border-white/10 flex justify-between text-sm font-medium">
-                                        <span className="text-zinc-300">Net Amount</span>
+                                        <span className="text-zinc-300">Valor Líquido</span>
                                         {loading ? <Skeleton className="h-4 w-24" /> : (
                                             <span className="text-emerald-400">
                                                 {orderDetails?._capture_details?.seller_receivable_breakdown?.net_amount ?
@@ -347,7 +347,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                         orderDetails?.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.exchange_rate) && (
                                             <div className="pt-2 mt-2 border-t border-white/10 space-y-1">
                                                 <div className="flex justify-between text-xs">
-                                                    <span className="text-zinc-500">Exchange Rate</span>
+                                                    <span className="text-zinc-500">Taxa de Câmbio</span>
                                                     {loading ? <Skeleton className="h-3 w-32" /> : (
                                                         <span className="text-zinc-400">
                                                             1 {orderDetails?._capture_details?.seller_receivable_breakdown?.exchange_rate?.source_currency || orderDetails?.purchase_units?.[0]?.payments?.captures?.[0]?.seller_receivable_breakdown?.exchange_rate?.source_currency} = {' '}
@@ -357,7 +357,7 @@ export const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = (
                                                     )}
                                                 </div>
                                                 <div className="flex justify-between text-sm font-medium">
-                                                    <span className="text-zinc-300">Converted Amount</span>
+                                                    <span className="text-zinc-300">Valor Convertido</span>
                                                     {loading ? <Skeleton className="h-4 w-28" /> : (
                                                         <span className="text-blue-400">
                                                             {orderDetails?._capture_details?.seller_receivable_breakdown?.receivable_amount ?

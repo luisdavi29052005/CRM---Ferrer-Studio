@@ -8,7 +8,7 @@ import { ChatInput } from './chat/ChatInput';
 import { ContactInfo } from './chat/ContactInfo';
 import { ChatLoading } from './chat/ChatLoading';
 import { MediaPreview } from './chat/MediaPreview';
-import { Loader2, QrCode, Smartphone, RefreshCw, MessageSquare } from 'lucide-react';
+import { Loader2, QrCode, Smartphone, RefreshCw, MessageSquare, MoreVertical, Plus, MonitorSmartphone } from 'lucide-react';
 import { Lead } from '../types';
 import { fetchLeads, fetchApifyLeads, fetchContactProfilePic, fetchWahaChats, fetchWahaMessages, formatChatId } from '../services/supabaseService';
 import { supabase } from '../supabaseClient';
@@ -44,7 +44,6 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
     }
   }, [propChats]);
 
-  // Initialize selectedChatId with robust fallback logic to prevent flicker
   // Initialize selectedChatId with robust fallback logic to prevent flicker
   const [selectedChatId, setSelectedChatId] = useState<string | null>(() => {
     console.log('Chat initializing', { initialChatId, initialLead });
@@ -92,12 +91,6 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
     }
   }, [propLeads, propApifyLeads]);
 
-  // 2. Load Chat List (Now handled in App.tsx)
-  const refreshChats = async () => {
-    // Optional: Implement manual refresh if needed, or rely on App.tsx polling/subscription
-    console.log("Refresh requested - handled by App.tsx subscription");
-  };
-
   // 1. Session Monitoring (Simple Polling)
   const checkSessionStatus = useCallback(async () => {
     try {
@@ -123,7 +116,6 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
               console.error("Failed to fetch profile", e);
             }
           }
-          // loadChats(); // Removed
         }
       } catch (e) {
         // Session doesn't exist, try to create/start
@@ -183,13 +175,6 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
     };
 
     fetchMsgs();
-    // Poll messages every 2s (Replace with Webhook later)
-    const msgInterval = setInterval(fetchMsgs, 2000);
-
-    return () => {
-      isMounted = false;
-      clearInterval(msgInterval);
-    };
   }, [selectedChatId, status, sessionName]);
 
   // Merge chats with lead info for active chat
@@ -257,6 +242,183 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
       }
     }
   }
+
+  // Fetch Profile Pictures locally when Chat component mounts
+  const [localProfilePics, setLocalProfilePics] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const fetchImages = async () => {
+      const newPics: Record<string, string> = {};
+      const uniqueChatIds = Array.from(new Set(chats.map(c => c.id)));
+
+      // Also check leads
+      leads.forEach(l => {
+        if (l.chat_id) uniqueChatIds.push(l.chat_id);
+        else if (l.phone) uniqueChatIds.push(`${l.phone}@c.us`);
+      });
+
+      const uniqueIds = Array.from(new Set(uniqueChatIds));
+
+      // Filter out IDs we already have
+      const idsToFetch = uniqueIds.filter(id => {
+        if (localProfilePics[id]) return false;
+
+        // Filter out junk/system IDs
+        if (id.includes('@lid') || id.startsWith('0@') || id.includes('status@broadcast')) return false;
+
+        // Check if it's a valid contact we care about
+        // 1. Is it a Lead?
+        const isLead = leads.some(l => l.chat_id === id || `${l.phone}@c.us` === id);
+        if (isLead) return true;
+
+        // 2. Is it an Apify Lead? (Assuming apifyLeads are passed or accessible, though here we rely on leads prop mostly)
+        // If apifyLeads are merged into leads or handled separately, check them.
+        // In Chat.tsx we have apifyLeads prop.
+        const isApify = apifyLeads?.some(l => l.phone && (`${l.phone}@c.us` === id || l.phone === id));
+        if (isApify) return true;
+
+        // 3. Is it a persisted chat?
+        const chat = chats.find(c => c.id === id);
+        if (chat && chat._persisted) return true;
+
+        // If none of the above, skip it (it's likely a random WAHA contact not in our DB)
+        return false;
+      });
+
+      if (idsToFetch.length === 0) return;
+
+      const batchSize = 5;
+      for (let i = 0; i < idsToFetch.length; i += batchSize) {
+        const batch = idsToFetch.slice(i, i + batchSize);
+        await Promise.all(batch.map(async (chatId) => {
+          try {
+            const url = await fetchContactProfilePic(chatId);
+            if (url) {
+              newPics[chatId] = url;
+            }
+          } catch (e) { }
+        }));
+      }
+
+      if (Object.keys(newPics).length > 0) {
+        setLocalProfilePics(prev => ({ ...prev, ...newPics }));
+      }
+    };
+
+    if (chats.length > 0 || leads.length > 0) {
+      fetchImages();
+    }
+  }, [chats.length, leads.length]); // Only re-run if counts change significantly to avoid loops
+
+  // 4. Realtime Subscription for Messages (Active Chat)
+  useEffect(() => {
+    if (!activeChat?.chatID) return;
+
+    const chatJid = activeChat.chatID;
+    let channel: any;
+
+    const setupSubscription = async () => {
+      // Get Integer ID for this chat to subscribe to messages
+      const { data } = await supabase
+        .from('whatsapp_waha_chats')
+        .select('id')
+        .eq('chat_jid', chatJid)
+        .maybeSingle();
+
+      if (!data) return; // Chat not in DB yet
+
+      const chatIdInt = data.id;
+
+      channel = supabase
+        .channel(`chat:${chatIdInt}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'whatsapp_waha_messages',
+            filter: `chat_id=eq.${chatIdInt}`
+          },
+          (payload) => {
+            const newMsg = payload.new as any;
+            const wahaMsg: WahaMessage = {
+              id: newMsg.message_id || newMsg.id.toString(),
+              timestamp: new Date(newMsg.message_timestamp).getTime() / 1000,
+              from: newMsg.from_jid,
+              body: newMsg.body || '',
+              fromMe: newMsg.from_me,
+              ack: newMsg.ack,
+              hasMedia: newMsg.has_media,
+              mediaUrl: newMsg.media_url,
+              mediaType: newMsg.type,
+              caption: newMsg.media_caption
+            };
+
+            setMessages(prev => {
+              if (prev.some(m => m.id === wahaMsg.id)) return prev;
+              return [...prev, wahaMsg].sort((a, b) => a.timestamp - b.timestamp);
+            });
+
+            // Update Chat List (Sidebar) Optimistically
+            setChats(prevChats => {
+              return prevChats.map(c => {
+                if (c.id === chatJid || c.chatID === chatJid) {
+                  return {
+                    ...c,
+                    last_message: wahaMsg.body,
+                    last_message_at: new Date(wahaMsg.timestamp * 1000).toISOString(),
+                    timestamp: wahaMsg.timestamp,
+                    unreadCount: status === 'WORKING' ? 0 : (c.unreadCount || 0) + 1
+                  };
+                }
+                return c;
+              }).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            });
+
+            // Mark as seen
+            if (status === 'WORKING') {
+              wahaService.sendSeen(sessionName, chatJid).catch(() => { });
+            }
+          }
+        )
+        .subscribe();
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [activeChat?.chatID, status, sessionName]);
+
+  // 5. Realtime Subscription for Chat List Updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('public:whatsapp_waha_chats')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'whatsapp_waha_chats' },
+        async (payload) => {
+          // Only fetch if it's a new chat or significant update that we missed
+          // For simple message updates, we handle it in the message subscription above to be faster
+          // But let's keep this for sync
+          const latestChats = await fetchWahaChats().catch(() => []);
+          if (latestChats) {
+            setChats(prev => {
+              // Merge to keep selection state stable if needed, though replacing is usually fine
+              // The key is that selectedChatId is separate state, so replacing chats shouldn't close it
+              // unless the selected chat is missing from the new list.
+              return latestChats;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   // AI Auto-Response Logic
   useEffect(() => {
@@ -389,8 +551,6 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
     }
   };
 
-  // --- RENDERING ---
-
   // --- ACTIONS ---
   const handleLogout = async () => {
     try {
@@ -432,6 +592,27 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
     }
   };
 
+  const handleRefresh = async () => {
+    setIsChatListLoading(true);
+    try {
+      const [latestChats, latestLeads, latestApify] = await Promise.all([
+        fetchWahaChats().catch(() => []),
+        fetchLeads().catch(() => []),
+        fetchApifyLeads().catch(() => [])
+      ]);
+
+      if (latestChats) setChats(latestChats);
+      if (!propLeads && latestLeads) setLeads(latestLeads);
+      if (!propApifyLeads && latestApify) setApifyLeads(latestApify);
+
+      await checkSessionStatus();
+    } catch (error) {
+      console.error("Error refreshing:", error);
+    } finally {
+      setIsChatListLoading(false);
+    }
+  };
+
   if (isLoading) {
     return <ChatLoading />;
   }
@@ -442,8 +623,8 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
         <div className="bg-white p-4 rounded-xl shadow-2xl mb-6">
           <img src={qrCodeUrl} alt="Scan QR Code" className="w-64 h-64" />
         </div>
-        <h2 className="text-2xl font-bold mb-2">Connect to WhatsApp</h2>
-        <p className="text-zinc-500">Open WhatsApp on your phone &gt; Linked devices &gt; Link a device</p>
+        <h2 className="text-2xl font-bold mb-2">Conectar ao WhatsApp</h2>
+        <p className="text-zinc-500">Abra o WhatsApp no seu celular &gt; Aparelhos conectados &gt; Conectar um aparelho</p>
       </div>
     );
   }
@@ -454,48 +635,77 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
 
   // Main Chat Interface
   return (
-    <div className="flex h-full bg-[#09090b] overflow-hidden">
-      {/* Sidebar */}
-      <div className={`${selectedChatId ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-96 flex-col bg-[#09090b]`}>
-        <ChatSidebar
-          chats={chatList}
-          leads={leads}
-          apifyLeads={apifyLeads}
-          selectedChatId={selectedChatId}
-          onSelectChat={setSelectedChatId}
-          wahaProfile={wahaProfile}
-          profilePics={profilePics}
-          connectionStatus={status}
-          onLogout={handleLogout}
-          onRestart={handleRestart}
-          onUpdateProfile={handleUpdateProfile}
-          onNavigate={onNavigate}
-          isLoading={isLoading || isChatListLoading}
-        />
+    <div className="p-8 h-full flex flex-col overflow-hidden relative">
+      {/* 1. Page Header */}
+      <div className="flex items-end justify-between mb-8 pb-6 border-b border-white/5 shrink-0">
+        <div>
+          {/* Breadcrumb / Overline - Removed as per user request */}
+          <h2 className="text-3xl font-bold text-zinc-100 tracking-tight">Conversas</h2>
+          <p className="text-zinc-500 text-sm mt-2 font-medium">Gerencie e responda conversas sincronizadas com o WhatsApp.</p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefresh}
+            disabled={isChatListLoading}
+            className="px-4 py-2 bg-white hover:bg-zinc-200 text-black rounded-lg transition-colors text-xs font-bold uppercase tracking-wide flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw size={14} className={isChatListLoading ? 'animate-spin' : ''} />
+            <span>Atualizar</span>
+          </button>
+          <button className="p-2 hover:bg-white/5 text-zinc-400 hover:text-zinc-200 rounded-lg border border-transparent hover:border-white/5 transition-all">
+            <MoreVertical size={16} />
+          </button>
+        </div>
       </div>
 
-      {/* Chat Window */}
-      {selectedChatId ? (
-        <ChatWindow
-          activeChat={activeChat}
-          messages={messages}
-          onToggleContactInfo={() => setShowContactInfo(!showContactInfo)}
-          onBack={() => setSelectedChatId(null)}
-          profilePic={profilePics[selectedChatId]}
-          presence={contactPresence}
-          currentUserId={wahaProfile?.id}
-          onSendMessage={handleSendMessage}
-          onSendMedia={handleSendMedia}
-        />
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 bg-[#09090b] hidden md:flex">
-          <div className="w-16 h-16 bg-zinc-900/50 rounded-full flex items-center justify-center mb-4">
-            <Smartphone size={32} className="text-zinc-600" />
-          </div>
-          <h3 className="text-lg font-medium text-zinc-300 mb-1">{t('chat.welcome_title', 'Welcome to WhatsApp')}</h3>
-          <p className="text-sm max-w-xs text-center text-zinc-500">{t('chat.welcome_subtitle', 'Select a chat to start messaging')}</p>
+      {/* 2. Content Area - Two Panels */}
+      <div className="flex-1 flex gap-6 min-h-0">
+        {/* Left Panel: Chat List */}
+        <div className="w-[30%] min-w-[320px] bg-[#09090b] border border-white/5 rounded-2xl overflow-hidden flex flex-col shadow-xl">
+          <ChatSidebar
+            chats={chatList}
+            leads={leads}
+            apifyLeads={apifyLeads}
+            selectedChatId={selectedChatId}
+            onSelectChat={setSelectedChatId}
+            wahaProfile={wahaProfile}
+            profilePics={localProfilePics}
+            connectionStatus={status}
+            onLogout={handleLogout}
+            onRestart={handleRestart}
+            onUpdateProfile={handleUpdateProfile}
+            onNavigate={onNavigate}
+            isLoading={isLoading || isChatListLoading}
+          />
         </div>
-      )}
+
+        {/* Right Panel: Chat Window */}
+        <div className="flex-1 bg-[#09090b] border border-white/5 rounded-2xl overflow-hidden flex flex-col shadow-xl relative">
+          {selectedChatId && activeChat ? (
+            <ChatWindow
+              activeChat={activeChat}
+              messages={messages}
+              onToggleContactInfo={() => setShowContactInfo(!showContactInfo)}
+              onBack={() => setSelectedChatId(null)}
+              profilePic={localProfilePics[selectedChatId]}
+              presence={contactPresence}
+              currentUserId={wahaProfile?.id}
+              onSendMessage={handleSendMessage}
+              onSendMedia={handleSendMedia}
+            />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 bg-[#09090b]">
+              <div className="w-16 h-16 bg-zinc-900/50 rounded-full flex items-center justify-center mb-4 border border-white/5">
+                <MessageSquare size={32} className="text-zinc-600" />
+              </div>
+              <h3 className="text-lg font-medium text-zinc-300 mb-1">Bem-vindo ao Chat</h3>
+              <p className="text-sm max-w-xs text-center text-zinc-500">Selecione uma conversa ao lado para começar o atendimento.</p>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Media Preview Overlay */}
       {previewFile && (
@@ -509,13 +719,16 @@ export const Chat: React.FC<ChatProps> = ({ initialChatId, initialLead, profileP
         />
       )}
 
-      {/* Contact Info Sidebar (Right) */}
+      {/* Contact Info Sidebar (Right) - Optional, maybe overlay or inside right panel? 
+          For now keeping it as overlay or hidden to respect strict 2-panel layout request 
+          unless user opens it. 
+      */}
       {showContactInfo && activeChat && (
-        <div className="w-80 bg-[#09090b] hidden xl:block">
+        <div className="absolute right-8 top-8 bottom-8 w-80 bg-[#09090b] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden">
           <ContactInfo
             chat={activeChat}
             onClose={() => setShowContactInfo(false)}
-            profilePic={profilePics[activeChat.id]}
+            profilePic={localProfilePics[activeChat.id]}
           />
         </div>
       )}

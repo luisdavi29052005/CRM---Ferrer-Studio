@@ -22,8 +22,8 @@ export const aiService = {
         const apiKey = await settingsService.getSetting('gemini_api_key');
 
         if (!apiKey) {
-            console.warn('Gemini API Key is missing in System Settings. Falling back to mock logic.');
-            return mockAnalyze(lastMessage);
+            console.warn('Gemini API Key is missing in System Settings.');
+            throw new Error('Gemini API Key is missing');
         }
 
         try {
@@ -71,7 +71,7 @@ export const aiService = {
 
         } catch (error) {
             console.error('Gemini Analysis Failed:', error);
-            return mockAnalyze(lastMessage);
+            throw error;
         }
     },
 
@@ -79,7 +79,7 @@ export const aiService = {
         const apiKey = await settingsService.getSetting('gemini_api_key');
 
         if (!apiKey) {
-            return mockGenerate(analysis, leadName);
+            throw new Error('Gemini API Key is missing');
         }
 
         try {
@@ -139,7 +139,7 @@ export const aiService = {
 
         } catch (error) {
             console.error('Gemini Generation Failed:', error);
-            return mockGenerate(analysis, leadName);
+            throw error;
         }
     },
 
@@ -148,19 +148,4 @@ export const aiService = {
         const userMessages = messages.filter(m => !m.fromMe).length;
         return userMessages >= 2;
     }
-};
-
-// Fallback Mock Functions (kept for safety/no-key scenarios)
-const mockAnalyze = (lastMessage: string): AIAnalysisResult => {
-    const lowerMsg = lastMessage.toLowerCase();
-    if (lowerMsg.includes('digite 1') || lowerMsg.includes('menu:')) return { intent: 'bot_detected', confidence: 0.9, reasoning: 'Fallback mock bot detection' };
-    if (lowerMsg.includes('humano')) return { intent: 'handoff', confidence: 0.9, reasoning: 'Fallback mock handoff' };
-    if (lowerMsg.includes('lanchonete')) return { intent: 'sales_pitch', confidence: 0.8, reasoning: 'Fallback mock sales pitch' };
-    return { intent: 'neutral', confidence: 0.5 };
-};
-
-const mockGenerate = (analysis: AIAnalysisResult, leadName: string): AIResponse => {
-    if (analysis.intent === 'bot_detected') return { text: "Olá, gostaria de falar com um humano.", action: 'none' };
-    if (analysis.intent === 'sales_pitch') return { text: `Olá ${leadName}, vi sua lanchonete e tenho uma proposta de fotos IA.`, action: 'none' };
-    return { text: "Olá, como posso ajudar?", action: 'none' };
 };

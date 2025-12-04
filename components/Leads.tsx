@@ -22,9 +22,17 @@ const StageBadge = ({ stage }: { stage: string }) => {
     'Lost': 'bg-red-500/10 text-red-500 border-red-500/20',
   };
 
+  const labels: Record<string, string> = {
+    'New': 'Novo',
+    'Contacted': 'Contatado',
+    'In Negotiation': 'Em Negociação',
+    'Won': 'Ganho',
+    'Lost': 'Perdido',
+  };
+
   return (
     <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${colors[stage] || 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20'}`}>
-      {stage}
+      {labels[stage] || stage}
     </span>
   );
 };
@@ -36,9 +44,15 @@ const TemperatureBadge = ({ temp }: { temp: string }) => {
     'Hot': 'text-red-400',
   };
 
+  const labels: Record<string, string> = {
+    'Cold': 'Frio',
+    'Warm': 'Morno',
+    'Hot': 'Quente',
+  };
+
   return (
     <span className={`text-xs font-bold ${colors[temp] || 'text-zinc-400'}`}>
-      {temp}
+      {labels[temp] || temp}
     </span>
   );
 };
@@ -139,7 +153,7 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
                     className="absolute right-0 top-full mt-2 w-80 bg-[#0B0B0B] border border-white/10 rounded-xl shadow-2xl shadow-black/50 backdrop-blur-xl z-50 p-5"
                   >
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-bold text-zinc-200">Filters</h3>
+                      <h3 className="text-sm font-bold text-zinc-200">Filtros</h3>
                       <button
                         onClick={() => {
                           setFilters({
@@ -154,7 +168,7 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
                         }}
                         className="text-[10px] text-zinc-500 hover:text-zinc-300 uppercase tracking-wider font-medium"
                       >
-                        Clear All
+                        Limpar Tudo
                       </button>
                     </div>
 
@@ -162,31 +176,31 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
                       {/* Stage & Temperature */}
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Stage</label>
+                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Estágio</label>
                           <select
                             value={filters.stage}
                             onChange={(e) => setFilters({ ...filters, stage: e.target.value as any })}
                             className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors"
                           >
-                            <option value="all">All Stages</option>
-                            <option value="New">New</option>
-                            <option value="Contacted">Contacted</option>
-                            <option value="In Negotiation">In Negotiation</option>
-                            <option value="Won">Won</option>
-                            <option value="Lost">Lost</option>
+                            <option value="all">Todos os Estágios</option>
+                            <option value="New">Novo</option>
+                            <option value="Contacted">Contatado</option>
+                            <option value="In Negotiation">Em Negociação</option>
+                            <option value="Won">Ganho</option>
+                            <option value="Lost">Perdido</option>
                           </select>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Temperature</label>
+                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Temperatura</label>
                           <select
                             value={filters.temperature}
                             onChange={(e) => setFilters({ ...filters, temperature: e.target.value as any })}
                             className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors"
                           >
-                            <option value="all">All Temps</option>
-                            <option value="Cold">Cold</option>
-                            <option value="Warm">Warm</option>
-                            <option value="Hot">Hot</option>
+                            <option value="all">Todas as Temps</option>
+                            <option value="Cold">Frio</option>
+                            <option value="Warm">Morno</option>
+                            <option value="Hot">Quente</option>
                           </select>
                         </div>
                       </div>
@@ -194,26 +208,26 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
                       {/* City & State */}
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">City</label>
+                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Cidade</label>
                           <select
                             value={filters.city}
                             onChange={(e) => setFilters({ ...filters, city: e.target.value })}
                             className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors appearance-none"
                           >
-                            <option value="">All Cities</option>
+                            <option value="">Todas as Cidades</option>
                             {Array.from(new Set(leads.map(lead => lead.city).filter(Boolean))).sort().map((city) => (
                               <option key={city} value={city}>{city}</option>
                             ))}
                           </select>
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">State</label>
+                          <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Estado</label>
                           <select
                             value={filters.state}
                             onChange={(e) => setFilters({ ...filters, state: e.target.value })}
                             className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors appearance-none"
                           >
-                            <option value="">All States</option>
+                            <option value="">Todos os Estados</option>
                             {Array.from(new Set(leads.map(lead => lead.state).filter(Boolean))).sort().map((state) => (
                               <option key={state} value={state}>{state}</option>
                             ))}
@@ -223,19 +237,22 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
 
                       {/* Category */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Category</label>
-                        <input
-                          type="text"
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Categoria</label>
+                        <select
                           value={filters.category}
                           onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-                          placeholder="e.g. Real Estate"
-                          className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
-                        />
+                          className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors appearance-none"
+                        >
+                          <option value="">Todas as Categorias</option>
+                          {Array.from(new Set(leads.map(lead => lead.category).filter(Boolean))).sort().map((category) => (
+                            <option key={category} value={category}>{category}</option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* Date Range */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Last Interaction</label>
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Última Interação</label>
                         <div className="grid grid-cols-2 gap-3">
                           <input
                             type="date"
@@ -271,8 +288,8 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
           <thead className="sticky top-0 z-10 bg-black/80 backdrop-blur-sm">
             <tr>
               <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.name')}</th>
-              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">Location</th>
-              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">Category</th>
+              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">Localização</th>
+              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">Categoria</th>
               <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.status')}</th>
               <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.temp')}</th>
               <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.value')}</th>
@@ -348,7 +365,7 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, isAdmin }) => {
             ) : (
               <tr>
                 <td colSpan={8} className="p-8 text-center text-zinc-500 text-sm">
-                  No leads found matching your filters.
+                  Nenhum lead encontrado com os filtros selecionados.
                 </td>
               </tr>
             )}

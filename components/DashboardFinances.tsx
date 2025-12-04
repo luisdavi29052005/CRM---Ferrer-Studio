@@ -275,7 +275,7 @@ export const DashboardFinances: React.FC<DashboardFinancesProps> = ({ leads }) =
                                                 <Tooltip
                                                     contentStyle={{ backgroundColor: '#000', border: '1px solid #333', borderRadius: '8px' }}
                                                     itemStyle={{ fontSize: '12px', color: '#fff' }}
-                                                    formatter={(v: number) => [`$${v.toFixed(2)}`, 'Earnings']}
+                                                    formatter={(v: number) => [`$${v.toFixed(2)}`, 'Ganhos']}
                                                     labelFormatter={(label) => new Date(label).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                                                 />
                                                 <Area type="monotone" dataKey="amount" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#colorPayPal)" />
@@ -336,7 +336,7 @@ export const DashboardFinances: React.FC<DashboardFinancesProps> = ({ leads }) =
                                                                 ? 'bg-emerald-500/10 text-emerald-500'
                                                                 : 'bg-yellow-500/10 text-yellow-500'
                                                                 }`}>
-                                                                {tx.status === 'S' ? 'COMPLETED' : tx.status}
+                                                                {tx.status === 'S' ? 'CONCLUÍDO' : tx.status}
                                                             </span>
                                                         </td>
                                                     </tr>

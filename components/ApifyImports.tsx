@@ -84,33 +84,49 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
     dateEnd: ''
   });
 
-  // Fetch profile pictures for items with phone numbers
+  // Fetch profile pictures for items with phone numbers (Lazy Load)
   useEffect(() => {
     const fetchPics = async () => {
       const pics: { [key: string]: string } = {};
-      // Process in batches to avoid overwhelming the server
-      const batchSize = 5;
       const itemsWithPhone = items.filter(item => item.phone);
 
-      for (let i = 0; i < itemsWithPhone.length; i += batchSize) {
-        const batch = itemsWithPhone.slice(i, i + batchSize);
+      // Filter out IDs we already have
+      const itemsToFetch = itemsWithPhone.filter(item => {
+        if (!item.phone) return false;
+        if (profilePics[item.phone]) return false;
+
+        // Filter out junk/system IDs
+        if (item.phone.includes('@lid') || item.phone.startsWith('0@') || item.phone.includes('status@broadcast')) return false;
+
+        return true;
+      });
+
+      if (itemsToFetch.length === 0) return;
+
+      const batchSize = 5;
+      for (let i = 0; i < itemsToFetch.length; i += batchSize) {
+        const batch = itemsToFetch.slice(i, i + batchSize);
         await Promise.all(batch.map(async (item) => {
-          if (item.phone && !profilePics[item.phone]) {
-            const url = await fetchContactProfilePic(item.phone);
-            if (url) {
-              pics[item.phone] = url;
-            }
+          if (item.phone) {
+            try {
+              const url = await fetchContactProfilePic(item.phone);
+              if (url) {
+                pics[item.phone] = url;
+              }
+            } catch (e) { }
           }
         }));
-        // Update state incrementally
-        setProfilePics(prev => ({ ...prev, ...pics }));
+
+        if (Object.keys(pics).length > 0) {
+          setProfilePics(prev => ({ ...prev, ...pics }));
+        }
       }
     };
 
     if (items.length > 0) {
       fetchPics();
     }
-  }, [items]);
+  }, [items.length]); // Only re-run if item count changes significantly
 
   const filteredItems = items.filter(item => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -182,7 +198,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
   const handleDelete = async () => {
     if (selectedItems.size === 0) return;
 
-    if (window.confirm(`Are you sure you want to delete ${selectedItems.size} items?`)) {
+    if (window.confirm(`Tem certeza que deseja excluir ${selectedItems.size} itens?`)) {
       setDeleting(true);
       try {
         await deleteApifyLeads(Array.from(selectedItems).map(id => id.toString()));
@@ -190,7 +206,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
         if (onImport) await onImport(); // Refresh list
       } catch (error) {
         console.error('Error deleting items:', error);
-        alert('Failed to delete items');
+        alert('Falha ao excluir itens');
       } finally {
         setDeleting(false);
       }
@@ -245,10 +261,10 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
       // Final refresh
       if (onImport) await onImport();
       setSelectedItems(new Set());
-      setAlertModal({ isOpen: true, title: 'Success', message: `Import completed: ${importedCount} leads added.`, type: 'success' });
+      setAlertModal({ isOpen: true, title: 'Sucesso', message: `Importação concluída: ${importedCount} leads adicionados.`, type: 'success' });
     } catch (error) {
       console.error('Error importing items:', error);
-      setAlertModal({ isOpen: true, title: 'Error', message: 'Error importing items', type: 'error' });
+      setAlertModal({ isOpen: true, title: 'Erro', message: 'Erro ao importar itens', type: 'error' });
     } finally {
       setImporting(false);
       setImportProgress(0);
@@ -338,7 +354,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
         const skippedNoPhone = allLeads.length - leadsWithPhone.length;
 
         if (leadsWithPhone.length === 0) {
-          setAlertModal({ isOpen: true, title: 'Import Failed', message: `No valid leads found. (${skippedNoPhone} skipped due to missing phone)`, type: 'error' });
+          setAlertModal({ isOpen: true, title: 'Falha na Importação', message: `Nenhum lead válido encontrado. (${skippedNoPhone} pulados devido à falta de telefone)`, type: 'error' });
           setImporting(false);
           if (fileInputRef.current) fileInputRef.current.value = '';
           return;
@@ -373,12 +389,12 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
               if (onImport) await onImport();
             }
           } else {
-            console.log(`Skipping invalid WhatsApp number: ${lead.phone}`);
+            console.log(`Pulando número de WhatsApp inválido: ${lead.phone}`);
             skippedInvalid++;
           }
         }
 
-        setAlertModal({ isOpen: true, title: 'Import Finished', message: `Success: ${insertedCount}\nInvalid/Skipped: ${skippedInvalid}\nNo Phone: ${skippedNoPhone}\nErrors: ${errorCount}`, type: 'success' });
+        setAlertModal({ isOpen: true, title: 'Importação Finalizada', message: `Sucesso: ${insertedCount}\nInválido/Pulado: ${skippedInvalid}\nSem Telefone: ${skippedNoPhone}\nErros: ${errorCount}`, type: 'success' });
 
         // Final refresh just in case
         if (onImport) await onImport();
@@ -389,7 +405,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
       },
       error: (error) => {
         console.error('CSV Parse Error:', error);
-        setAlertModal({ isOpen: true, title: 'Error', message: t('imports.error_parsing_csv'), type: 'error' });
+        setAlertModal({ isOpen: true, title: 'Erro', message: t('imports.error_parsing_csv'), type: 'error' });
         setImporting(false);
       }
     });
@@ -416,8 +432,8 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
     if (scrapeConfig.searchTerms.length === 0 || !scrapeConfig.location) {
       setAlertModal({
         isOpen: true,
-        title: 'Missing Information',
-        message: 'Please provide at least one search term and a location.',
+        title: 'Informações Faltando',
+        message: 'Por favor, forneça pelo menos um termo de busca e uma localização.',
         type: 'error'
       });
       return;
@@ -426,11 +442,11 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
     setLoading(true);
     setScrapeStatus('running');
     setLogs([]); // Clear previous logs
-    addLog('Initializing scrape job...', 'info');
-    addLog(`Configuration: ${scrapeConfig.searchTerms.length} keywords, Location: ${scrapeConfig.location}`, 'info');
+    addLog('Inicializando tarefa de busca...', 'info');
+    addLog(`Configuração: ${scrapeConfig.searchTerms.length} palavras-chave, Localização: ${scrapeConfig.location}`, 'info');
 
     try {
-      addLog('Sending request to Apify...', 'info');
+      addLog('Enviando solicitação para Apify...', 'info');
       const response = await fetch('http://localhost:3001/api/apify/scrape', {
         method: 'POST',
         headers: {
@@ -452,17 +468,17 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to start scrape');
+        throw new Error(data.error || 'Falha ao iniciar busca');
       }
 
-      addLog(`Scrape completed successfully!`, 'success');
-      addLog(`Found: ${data.totalFound}, Added: ${data.added}, Skipped: ${data.skipped}`, 'success');
+      addLog(`Busca concluída com sucesso!`, 'success');
+      addLog(`Encontrado: ${data.totalFound}, Adicionado: ${data.added}, Pulado: ${data.skipped}`, 'success');
       setScrapeStatus('completed');
 
       setAlertModal({
         isOpen: true,
-        title: 'Scrape Finished',
-        message: `Scrape job finished. Found ${data.totalFound} items. Added: ${data.added}, Skipped: ${data.skipped}.`,
+        title: 'Busca Finalizada',
+        message: 'Tarefa de busca finalizada. Encontrado ${data.totalFound} itens. Adicionado: ${data.added}, Pulado: ${data.skipped}.',
         type: 'success'
       });
 
@@ -470,12 +486,12 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
 
     } catch (error: any) {
       console.error('Scrape error:', error);
-      addLog(`Error: ${error.message}`, 'error');
+      addLog(`Erro: ${error.message}`, 'error');
       setScrapeStatus('error');
       setAlertModal({
         isOpen: true,
-        title: 'Scrape Failed',
-        message: error.message || 'An error occurred while starting the scrape job.',
+        title: 'Falha na Busca',
+        message: error.message || 'Ocorreu um erro ao iniciar a tarefa de busca.',
         type: 'error'
       });
     } finally {
@@ -501,14 +517,14 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
 
       if (errorNull || errorEmpty) {
         console.error('Error cleaning invalid leads:', errorNull || errorEmpty);
-        setAlertModal({ isOpen: true, title: 'Error', message: t('imports.error_cleaning_leads'), type: 'error' });
+        setAlertModal({ isOpen: true, title: 'Erro', message: t('imports.error_cleaning_leads'), type: 'error' });
       } else {
-        setAlertModal({ isOpen: true, title: 'Success', message: t('imports.invalid_leads_cleaned_success'), type: 'success' });
+        setAlertModal({ isOpen: true, title: 'Sucesso', message: t('imports.invalid_leads_cleaned_success'), type: 'success' });
         if (onImport) await onImport();
       }
     } catch (error) {
       console.error('Error:', error);
-      setAlertModal({ isOpen: true, title: 'Error', message: t('imports.an_error_occurred'), type: 'error' });
+      setAlertModal({ isOpen: true, title: 'Erro', message: t('imports.an_error_occurred'), type: 'error' });
     }
   };
 
@@ -566,7 +582,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                     className="absolute right-0 top-full mt-2 w-80 bg-[#0B0B0B] border border-white/10 rounded-xl shadow-2xl shadow-black/50 backdrop-blur-xl z-50 p-5"
                   >
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-sm font-bold text-zinc-200">Filters</h3>
+                      <h3 className="text-sm font-bold text-zinc-200">Filtros</h3>
                       <button
                         onClick={() => {
                           setFilters({
@@ -580,7 +596,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                         }}
                         className="text-[10px] text-bronze-500 hover:text-bronze-400 font-medium uppercase tracking-wide"
                       >
-                        Clear All
+                        Limpar Tudo
                       </button>
                     </div>
 
@@ -593,22 +609,22 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                           onChange={(e) => setFilters({ ...filters, status: e.target.value as any })}
                           className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors appearance-none"
                         >
-                          <option value="all">All Statuses</option>
-                          <option value="sent">Sent</option>
-                          <option value="not sent">Not Sent</option>
-                          <option value="error">Error</option>
+                          <option value="all">Todos os Status</option>
+                          <option value="sent">Enviado</option>
+                          <option value="not sent">Não Enviado</option>
+                          <option value="error">Erro</option>
                         </select>
                       </div>
 
                       {/* City */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">City</label>
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Cidade</label>
                         <select
                           value={filters.city}
                           onChange={(e) => setFilters({ ...filters, city: e.target.value })}
                           className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors appearance-none"
                         >
-                          <option value="">All Cities</option>
+                          <option value="">Todas as Cidades</option>
                           {Array.from(new Set(items.map(item => item.city).filter(Boolean))).sort().map((city) => (
                             <option key={city} value={city}>{city}</option>
                           ))}
@@ -617,13 +633,13 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
 
                       {/* State */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">State</label>
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Estado</label>
                         <select
                           value={filters.state}
                           onChange={(e) => setFilters({ ...filters, state: e.target.value })}
                           className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors appearance-none"
                         >
-                          <option value="">All States</option>
+                          <option value="">Todos os Estados</option>
                           {Array.from(new Set(items.map(item => item.state).filter(Boolean))).sort().map((state) => (
                             <option key={state} value={state}>{state}</option>
                           ))}
@@ -632,19 +648,22 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
 
                       {/* Category */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Category</label>
-                        <input
-                          type="text"
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Categoria</label>
+                        <select
                           value={filters.category}
                           onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-                          placeholder="e.g. Real Estate"
-                          className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors placeholder:text-zinc-700"
-                        />
+                          className="w-full bg-zinc-900/50 border border-white/5 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500/50 transition-colors appearance-none"
+                        >
+                          <option value="">Todas as Categorias</option>
+                          {Array.from(new Set(items.map(item => item.category).filter(Boolean))).sort().map((category) => (
+                            <option key={category} value={category}>{category}</option>
+                          ))}
+                        </select>
                       </div>
 
                       {/* Date Range */}
                       <div className="space-y-1.5">
-                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Date Added</label>
+                        <label className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Data de Adição</label>
                         <div className="grid grid-cols-2 gap-3">
                           <input
                             type="date"
@@ -677,7 +696,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                 title="Delete Selected"
               >
                 {deleting ? <RefreshCw className="animate-spin" size={16} /> : <Trash2 size={16} />}
-                <span className="text-xs font-bold uppercase tracking-wide">Delete ({selectedItems.size})</span>
+                <span className="text-xs font-bold uppercase tracking-wide">Excluir ({selectedItems.size})</span>
               </button>
             )}
 
@@ -717,7 +736,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
               className="px-4 py-2 bg-white hover:bg-zinc-200 text-black rounded-lg transition-colors text-xs font-bold uppercase tracking-wide flex items-center gap-2"
             >
               <Plus size={14} />
-              <span>New Scrape</span>
+              <span>Nova Busca</span>
             </button>
 
 
@@ -870,7 +889,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
             <div className="w-full md:w-1/2 border-r border-white/5 flex flex-col h-full bg-[#0B0B0B]">
               {/* Header */}
               <div className="h-14 border-b border-white/5 flex items-center justify-between px-6 shrink-0">
-                <h2 className="text-lg font-bold text-zinc-100 tracking-tight">New Scrape Job</h2>
+                <h2 className="text-lg font-bold text-zinc-100 tracking-tight">Nova Tarefa de Busca</h2>
                 <button
                   onClick={() => setShowScrapePanel(false)}
                   className="p-2 hover:bg-white/5 rounded-full text-zinc-500 hover:text-zinc-300 transition-colors"
@@ -884,7 +903,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
 
                 {/* Search Keywords */}
                 <div className="space-y-3">
-                  <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Search Keywords</label>
+                  <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Palavras-chave de Busca</label>
                   <div className="space-y-3">
                     <div className="flex gap-2">
                       <input
@@ -892,14 +911,14 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                         value={currentKeyword}
                         onChange={(e) => setCurrentKeyword(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddKeyword()}
-                        placeholder="Type keyword and press Enter..."
+                        placeholder="Digite a palavra-chave e pressione Enter..."
                         className="flex-1 bg-transparent border-b border-zinc-800 text-zinc-200 py-1.5 focus:outline-none focus:border-bronze-500 transition-colors placeholder:text-zinc-700 text-sm"
                       />
                       <button
                         onClick={handleAddKeyword}
                         className="px-3 py-1.5 text-bronze-500 hover:text-bronze-400 font-medium text-xs uppercase tracking-wide transition-colors"
                       >
-                        Add
+                        Adicionar
                       </button>
                     </div>
 
@@ -917,7 +936,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                         </span>
                       ))}
                       {scrapeConfig.searchTerms.length === 0 && (
-                        <span className="text-xs text-zinc-600 italic">No keywords added.</span>
+                        <span className="text-xs text-zinc-600 italic">Nenhuma palavra-chave adicionada.</span>
                       )}
                     </div>
                   </div>
@@ -926,18 +945,18 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                 {/* Location & Max Results Row */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-3">
-                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Location</label>
+                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Localização</label>
                     <input
                       type="text"
                       value={scrapeConfig.location}
                       onChange={(e) => setScrapeConfig({ ...scrapeConfig, location: e.target.value })}
-                      placeholder="e.g. New York, USA"
+                      placeholder="ex: São Paulo, Brasil"
                       className="w-full bg-transparent border-b border-zinc-800 text-zinc-200 py-1.5 focus:outline-none focus:border-bronze-500 transition-colors placeholder:text-zinc-700 text-sm"
                     />
                   </div>
 
                   <div className="space-y-3">
-                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Max Results</label>
+                    <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Máx. Resultados</label>
                     <input
                       type="number"
                       value={scrapeConfig.maxResults}
@@ -951,29 +970,29 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
 
                 {/* Advanced Options */}
                 <div className="pt-6 border-t border-white/5 space-y-4">
-                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Advanced Configuration</h3>
+                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Configuração Avançada</h3>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Language */}
                     <div className="space-y-2">
-                      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Language</label>
+                      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Idioma</label>
                       <select
                         value={scrapeConfig.language}
                         onChange={(e) => setScrapeConfig({ ...scrapeConfig, language: e.target.value })}
                         className="w-full bg-transparent border-b border-zinc-800 text-zinc-200 py-1.5 focus:outline-none focus:border-bronze-500 transition-colors appearance-none cursor-pointer text-sm"
                       >
-                        <option value="en" className="bg-zinc-900">English</option>
-                        <option value="pt-BR" className="bg-zinc-900">Portuguese (Brazil)</option>
-                        <option value="pt-PT" className="bg-zinc-900">Portuguese (Portugal)</option>
-                        <option value="es" className="bg-zinc-900">Spanish</option>
-                        <option value="fr" className="bg-zinc-900">French</option>
-                        <option value="de" className="bg-zinc-900">German</option>
+                        <option value="en" className="bg-zinc-900">Inglês</option>
+                        <option value="pt-BR" className="bg-zinc-900">Português (Brasil)</option>
+                        <option value="pt-PT" className="bg-zinc-900">Português (Portugal)</option>
+                        <option value="es" className="bg-zinc-900">Espanhol</option>
+                        <option value="fr" className="bg-zinc-900">Francês</option>
+                        <option value="de" className="bg-zinc-900">Alemão</option>
                       </select>
                     </div>
 
                     {/* Max Reviews */}
                     <div className="space-y-2">
-                      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Max Reviews</label>
+                      <label className="text-xs font-medium text-zinc-400 uppercase tracking-wide">Máx. Avaliações</label>
                       <input
                         type="number"
                         value={scrapeConfig.maxReviews}
@@ -987,10 +1006,10 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                   {/* Toggles Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                     {[
-                      { label: 'Skip Closed Places', key: 'skipClosedPlaces' },
-                      { label: 'Scrape Contacts', key: 'scrapeContacts' },
-                      { label: 'Scrape Place Detail', key: 'scrapePlaceDetailPage' },
-                      { label: 'Include Web Results', key: 'includeWebResults' },
+                      { label: 'Pular Locais Fechados', key: 'skipClosedPlaces' },
+                      { label: 'Buscar Contatos', key: 'scrapeContacts' },
+                      { label: 'Buscar Detalhes do Local', key: 'scrapePlaceDetailPage' },
+                      { label: 'Incluir Resultados da Web', key: 'includeWebResults' },
                     ].map((toggle) => (
                       <label key={toggle.key} className="flex items-center gap-3 cursor-pointer group p-2 rounded-lg hover:bg-white/5 transition-colors border border-transparent hover:border-white/5">
                         <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${(scrapeConfig as any)[toggle.key]
@@ -1018,7 +1037,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                   onClick={() => setShowScrapePanel(false)}
                   className="px-4 py-2 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
                 >
-                  Cancel
+                  Cancelar
                 </button>
                 <button
                   onClick={handleScrape}
@@ -1029,7 +1048,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                     }`}
                 >
                   {loading ? <Loader className="animate-spin" size={14} /> : <Download size={14} />}
-                  {loading ? 'Scraping...' : 'Start Scrape'}
+                  {loading ? 'Buscando...' : 'Iniciar Busca'}
                 </button>
               </div>
             </div>
@@ -1042,9 +1061,9 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
               <div className="h-14 border-b border-white/5 flex items-center justify-between px-6 bg-zinc-900/30 backdrop-blur-sm z-10 shrink-0">
                 <h2 className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-2">
                   <div className={`w-1.5 h-1.5 rounded-full ${scrapeStatus === 'running' ? 'bg-green-500 animate-pulse' : 'bg-zinc-600'}`}></div>
-                  Live Logs
+                  Logs em Tempo Real
                 </h2>
-                {scrapeStatus === 'running' && <span className="text-[10px] text-bronze-500 font-mono animate-pulse">Processing...</span>}
+                {scrapeStatus === 'running' && <span className="text-[10px] text-bronze-500 font-mono animate-pulse">Processando...</span>}
               </div>
 
               <div className="flex-1 p-6 overflow-y-auto custom-scrollbar z-10">
@@ -1054,7 +1073,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                       <div className="w-12 h-12 rounded-full border-2 border-dashed border-zinc-700 flex items-center justify-center">
                         <Terminal size={20} />
                       </div>
-                      <p>Waiting for job to start...</p>
+                      <p>Aguardando início da tarefa...</p>
                     </div>
                   ) : (
                     logs.map((log, i) => (

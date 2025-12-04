@@ -86,3 +86,17 @@ export interface Template {
   content: string;
   created_at: string;
 }
+
+export interface Agent {
+  id: string;
+  created_at?: string;
+  name: string;
+  description?: string;
+  avatar_url?: string;
+  category: string;
+  model: string;
+  prompt: string;
+  temperature: number;
+  is_active: boolean;
+  user_id?: string;
+}

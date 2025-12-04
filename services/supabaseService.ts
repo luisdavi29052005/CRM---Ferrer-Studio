@@ -1,5 +1,5 @@
 import { supabase } from '../supabaseClient';
-import { Lead, ApifyLead, WahaChat, WahaMessage, Message, AutomationFlow, Stage, Temperature, Source, WahaStatus, Template } from '../types';
+import { Lead, ApifyLead, WahaChat, WahaMessage, Message, AutomationFlow, Stage, Temperature, Source, WahaStatus, Template, Agent } from '../types';
 import { Database } from '../database.types';
 
 type DBLead = Database['public']['Tables']['leads']['Row'];
@@ -112,6 +112,21 @@ export const updateApifyLeadStatus = async (id: string, status: boolean): Promis
         console.error('Error updating apify lead status:', error);
         throw error;
     }
+};
+
+export const fetchApifyCategories = async (): Promise<string[]> => {
+    const { data, error } = await supabase
+        .from('apify')
+        .select('category');
+
+    if (error) {
+        console.error('Error fetching apify categories:', error);
+        return [];
+    }
+
+    // Extract unique non-null categories
+    const categories = Array.from(new Set((data as any[]).map(item => item.category).filter(Boolean))).sort();
+    return categories as string[];
 };
 
 export const fetchWahaChats = async (): Promise<WahaChat[]> => {
@@ -755,6 +770,66 @@ export const deleteTemplate = async (id: string): Promise<boolean> => {
 
     if (error) {
         console.error('Error deleting template:', error);
+        return false;
+    }
+    return true;
+};
+
+// --- Agent Management ---
+
+export const fetchAgents = async (): Promise<Agent[]> => {
+    const { data, error } = await supabase
+        .from('agents')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching agents:', error);
+        return [];
+    }
+
+    return data as Agent[];
+};
+
+export const createAgent = async (agent: Omit<Agent, 'id' | 'created_at'>): Promise<Agent | null> => {
+    const { data, error } = await supabase
+        .from('agents')
+        .insert([agent])
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error creating agent:', error);
+        return null;
+    }
+
+    return data as Agent;
+};
+
+export const updateAgent = async (id: string, updates: Partial<Agent>): Promise<Agent | null> => {
+    const { data, error } = await supabase
+        .from('agents')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error updating agent:', error);
+        return null;
+    }
+
+    return data as Agent;
+};
+
+export const deleteAgent = async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+        .from('agents')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting agent:', error);
         return false;
     }
     return true;

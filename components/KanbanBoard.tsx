@@ -47,7 +47,7 @@ const LeadCard = ({ lead, onOpenChat, isOverlay = false }: { lead: Lead, onOpenC
                 lead.temperature === 'Warm' ? 'bg-orange-500/10 text-orange-500' :
                     'bg-blue-500/10 text-blue-500'
                 }`}>
-                {lead.temperature}
+                {lead.temperature === 'Hot' ? 'Quente' : lead.temperature === 'Warm' ? 'Morno' : 'Frio'}
             </span>
 
             <button
@@ -103,6 +103,14 @@ const DroppableColumn = ({ stage, leads, onOpenChat }: { stage: Stage, leads: Le
         'Lost': 'text-red-400',
     };
 
+    const stageLabels: Record<string, string> = {
+        'New': 'Novo',
+        'Contacted': 'Contatado',
+        'In Negotiation': 'Em Negociação',
+        'Won': 'Ganho',
+        'Lost': 'Perdido',
+    };
+
     return (
         <div
             ref={setNodeRef}
@@ -110,7 +118,7 @@ const DroppableColumn = ({ stage, leads, onOpenChat }: { stage: Stage, leads: Le
         >
             {/* Column Header */}
             <div className={`p-4 border-b border-white/5 flex items-center justify-between ${stageColors[stage]}`}>
-                <h3 className={`font-bold text-sm uppercase tracking-wider ${titleColors[stage]}`}>{stage}</h3>
+                <h3 className={`font-bold text-sm uppercase tracking-wider ${titleColors[stage]}`}>{stageLabels[stage] || stage}</h3>
                 <span className="text-xs font-mono text-zinc-500 bg-black/20 px-2 py-1 rounded-md">{leads.length}</span>
             </div>
 

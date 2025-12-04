@@ -67,12 +67,12 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isAdmin, wahaSta
             for (const [key, value] of Object.entries(systemSettings)) {
                 await settingsService.updateSetting(key, value);
             }
-            setSuccess(t('settings.system_updated') || 'System settings updated successfully');
+            setSuccess(t('settings.system_updated') || 'Configurações do sistema atualizadas com sucesso');
             // Re-check statuses after save
             checkApify();
             checkPaypal();
         } catch (err: any) {
-            setError(err.message || 'Failed to update system settings');
+            setError(err.message || 'Falha ao atualizar configurações do sistema');
         } finally {
             setLoading(false);
         }
@@ -81,7 +81,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isAdmin, wahaSta
     if (!isAdmin) {
         return (
             <div className="flex items-center justify-center h-full text-zinc-500">
-                Access Denied
+                Acesso Negado
             </div>
         );
     }
@@ -89,8 +89,8 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isAdmin, wahaSta
     return (
         <div className="flex flex-col h-full max-w-5xl mx-auto p-4 md:p-8">
             <div className="mb-8">
-                <h2 className="text-2xl font-bold text-zinc-100 tracking-tight">{t('settings.system.title') || 'System Settings'}</h2>
-                <p className="text-zinc-500 text-sm mt-2 font-medium">{t('settings.system.description') || 'Configure global system parameters and API connections.'}</p>
+                <h2 className="text-2xl font-bold text-zinc-100 tracking-tight">{t('settings.system.title') || 'Configurações do Sistema'}</h2>
+                <p className="text-zinc-500 text-sm mt-2 font-medium">{t('settings.system.description') || 'Configure parâmetros globais do sistema e conexões de API.'}</p>
             </div>
 
             <div className="flex-1 min-w-0">
@@ -103,7 +103,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isAdmin, wahaSta
                                 <h4 className="text-sm font-medium text-zinc-300">WhatsApp API (WAHA)</h4>
                                 <div className="flex items-center gap-2">
                                     <div className={`w-2 h-2 rounded-full ${wahaStatus === 'WORKING' ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                                    <span className="text-xs font-medium text-zinc-400">{wahaStatus === 'WORKING' ? 'Connected' : 'Disconnected'}</span>
+                                    <span className="text-xs font-medium text-zinc-400">{wahaStatus === 'WORKING' ? 'Conectado' : 'Desconectado'}</span>
                                 </div>
                             </div>
                             <div>
@@ -120,9 +120,9 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isAdmin, wahaSta
 
                         {/* Server Configuration */}
                         <div className="space-y-4 pt-4">
-                            <h4 className="text-sm font-medium text-zinc-300 border-b border-zinc-800 pb-2">Backend Server</h4>
+                            <h4 className="text-sm font-medium text-zinc-300 border-b border-zinc-800 pb-2">Servidor Backend</h4>
                             <div>
-                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Server URL</label>
+                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">URL do Servidor</label>
                                 <input
                                     type="text"
                                     value={systemSettings['server_api_url'] || ''}
@@ -136,22 +136,22 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isAdmin, wahaSta
                         {/* AI Configuration */}
                         <div className="space-y-4 pt-4">
                             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                                <h4 className="text-sm font-medium text-zinc-300">AI Configuration (Gemini)</h4>
+                                <h4 className="text-sm font-medium text-zinc-300">Configuração de IA (Gemini)</h4>
                                 <div className="flex items-center gap-2">
                                     <div className={`w-2 h-2 rounded-full ${systemSettings['gemini_api_key'] ? 'bg-emerald-500' : 'bg-zinc-700'}`}></div>
                                     <span className="text-xs font-medium text-zinc-400">
-                                        {systemSettings['gemini_api_key'] ? 'Configured' : 'Not Configured'}
+                                        {systemSettings['gemini_api_key'] ? 'Configurado' : 'Não Configurado'}
                                     </span>
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Gemini API Key</label>
+                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Chave da API Gemini</label>
                                 <input
                                     type="password"
                                     value={systemSettings['gemini_api_key'] || ''}
                                     onChange={(e) => setSystemSettings({ ...systemSettings, gemini_api_key: e.target.value })}
                                     className="w-full bg-transparent border-b border-zinc-800 py-2 text-sm text-zinc-200 focus:outline-none focus:border-zinc-500 transition-colors"
-                                    placeholder="Enter your Google Gemini API Key"
+                                    placeholder="Insira sua Chave da API Google Gemini"
                                 />
                             </div>
                         </div>
@@ -159,22 +159,22 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isAdmin, wahaSta
                         {/* Apify Configuration */}
                         <div className="space-y-4 pt-4">
                             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                                <h4 className="text-sm font-medium text-zinc-300">Apify Configuration</h4>
+                                <h4 className="text-sm font-medium text-zinc-300">Configuração Apify</h4>
                                 <div className="flex items-center gap-2">
                                     <div className={`w-2 h-2 rounded-full ${apifyStatus === 'active' ? 'bg-emerald-500' : apifyStatus === 'checking' ? 'bg-yellow-500 animate-pulse' : 'bg-zinc-700'}`}></div>
                                     <span className="text-xs font-medium text-zinc-400">
-                                        {apifyStatus === 'active' ? 'Active' : apifyStatus === 'checking' ? 'Checking...' : 'Inactive'}
+                                        {apifyStatus === 'active' ? 'Ativo' : apifyStatus === 'checking' ? 'Verificando...' : 'Inativo'}
                                     </span>
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">API Token</label>
+                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Token da API</label>
                                 <input
                                     type="password"
                                     value={systemSettings['apify_api_token'] || ''}
                                     onChange={(e) => setSystemSettings({ ...systemSettings, apify_api_token: e.target.value })}
                                     className="w-full bg-transparent border-b border-zinc-800 py-2 text-sm text-zinc-200 focus:outline-none focus:border-zinc-500 transition-colors"
-                                    placeholder="Enter your Apify API Token"
+                                    placeholder="Insira seu Token da API Apify"
                                 />
                             </div>
                         </div>
@@ -182,27 +182,27 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isAdmin, wahaSta
                         {/* PayPal Configuration */}
                         <div className="space-y-4 pt-4">
                             <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                                <h4 className="text-sm font-medium text-zinc-300">PayPal Configuration</h4>
+                                <h4 className="text-sm font-medium text-zinc-300">Configuração PayPal</h4>
                                 <div className="flex items-center gap-2">
                                     <div className={`w-2 h-2 rounded-full ${paypalStatus === 'active' ? 'bg-emerald-500' : paypalStatus === 'checking' ? 'bg-yellow-500 animate-pulse' : 'bg-zinc-700'}`}></div>
                                     <span className="text-xs font-medium text-zinc-400">
-                                        {paypalStatus === 'active' ? 'Active' : paypalStatus === 'checking' ? 'Checking...' : 'Inactive'}
+                                        {paypalStatus === 'active' ? 'Ativo' : paypalStatus === 'checking' ? 'Verificando...' : 'Inativo'}
                                     </span>
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Environment</label>
+                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Ambiente</label>
                                 <select
                                     value={systemSettings['paypal_env'] || 'SANDBOX'}
                                     onChange={(e) => setSystemSettings({ ...systemSettings, paypal_env: e.target.value })}
                                     className="w-full bg-zinc-900 border-b border-zinc-800 py-2 text-sm text-zinc-200 focus:outline-none focus:border-zinc-500 transition-colors"
                                 >
                                     <option value="SANDBOX">Sandbox</option>
-                                    <option value="PRODUCTION">Production</option>
+                                    <option value="PRODUCTION">Produção</option>
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Client ID</label>
+                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">ID do Cliente</label>
                                 <input
                                     type="text"
                                     value={systemSettings['paypal_client_id'] || ''}
@@ -211,7 +211,7 @@ export const SystemSettings: React.FC<SystemSettingsProps> = ({ isAdmin, wahaSta
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Client Secret</label>
+                                <label className="block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2">Segredo do Cliente</label>
                                 <input
                                     type="password"
                                     value={systemSettings['paypal_secret'] || ''}

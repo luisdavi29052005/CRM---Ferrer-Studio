@@ -161,8 +161,18 @@ class BlastService {
             .order('id', { ascending: true }) // Ensure consistent order
             .limit(limit);
 
+        console.log(`[Blast] Fetching batch with filters:`, filters);
+
         if (filters.city && filters.city.trim() !== '') {
-            query = query.ilike('city', `%${filters.city}%`);
+            // Fix encoding issue: 'Paraguau Paulista' -> 'Paraguaçu Paulista'
+            // This is a hacky fix, ideally frontend sends correct UTF-8.
+            // But we can also try to be more lenient with matching.
+            let city = filters.city;
+            if (city.includes('Paraguau')) {
+                city = city.replace('Paraguau', 'Paraguaçu');
+                console.log(`[Blast] Corrected city filter: ${filters.city} -> ${city}`);
+            }
+            query = query.ilike('city', `%${city}%`);
         }
         if (filters.category && filters.category.trim() !== '') {
             query = query.ilike('category', `%${filters.category}%`);
@@ -173,8 +183,8 @@ class BlastService {
 
         // Strategy specific
         if (strategy === 'new_only') {
-            // Check for 'false' (string), 'new' (legacy), or null
-            query = query.or('status.eq.false,status.eq.new,status.is.null');
+            // Check for 'false' (string), 'new' (legacy), 'not sent' (current default), or null
+            query = query.or('status.eq.false,status.eq.new,status.eq.not sent,status.is.null');
         } else if (strategy === 'follow_up') {
             // Check for 'true' (string) or boolean true or 'sent'
             query = query.or('status.eq.true,status.eq.sent');
@@ -182,11 +192,20 @@ class BlastService {
         // smart_mix fetches everything (no status filter)
 
         const { data, error } = await query;
+
         if (error) {
-            console.error('Error fetching batch:', error);
+            console.error('[Blast] Error fetching batch:', error);
             throw error;
         }
-        console.log(`Fetched ${data?.length} leads.`);
+
+        console.log(`[Blast] Query executed. Found ${data?.length} leads.`);
+        if (data?.length === 0) {
+            console.log('[Blast] WARNING: No leads found. Check filters and database content.');
+            console.log('[Blast] Filters used:', filters);
+            console.log('[Blast] Strategy:', strategy);
+            console.log('[Blast] LastId:', lastId);
+        }
+
         return data;
     }
 

@@ -44,7 +44,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ file, onSend, onCanc
                 >
                     <X size={24} />
                 </button>
-                <h2 className="text-zinc-200 font-medium">Preview</h2>
+                <h2 className="text-zinc-200 font-medium">Pré-visualização</h2>
                 <div className="w-10" /> {/* Spacer for centering */}
             </div>
 
@@ -80,7 +80,7 @@ export const MediaPreview: React.FC<MediaPreviewProps> = ({ file, onSend, onCanc
                             value={caption}
                             onChange={(e) => setCaption(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            placeholder="Add a caption..."
+                            placeholder="Adicione uma legenda..."
                             className="w-full bg-transparent border-none focus:ring-0 text-zinc-200 placeholder:text-zinc-500 resize-none py-3 px-4 text-[15px] custom-scrollbar leading-relaxed outline-none"
                             rows={1}
                             style={{

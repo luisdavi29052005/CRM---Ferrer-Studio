@@ -176,7 +176,7 @@ export const UserManagement: React.FC = () => {
                                                 <button
                                                     onClick={() => handleStatusChange(profile.id, 'active')}
                                                     className="p-1.5 rounded-md hover:bg-emerald-500/10 text-zinc-600 hover:text-emerald-500 transition-colors"
-                                                    title="Approve"
+                                                    title="Aprovar"
                                                 >
                                                     <Check size={14} />
                                                 </button>
@@ -185,7 +185,7 @@ export const UserManagement: React.FC = () => {
                                                 <button
                                                     onClick={() => handleStatusChange(profile.id, 'blocked')}
                                                     className="p-1.5 rounded-md hover:bg-red-500/10 text-zinc-600 hover:text-red-500 transition-colors"
-                                                    title="Block"
+                                                    title="Bloquear"
                                                 >
                                                     <X size={14} />
                                                 </button>
@@ -193,7 +193,7 @@ export const UserManagement: React.FC = () => {
                                                 <button
                                                     onClick={() => handleStatusChange(profile.id, 'active')}
                                                     className="p-1.5 rounded-md hover:bg-emerald-500/10 text-zinc-600 hover:text-emerald-500 transition-colors"
-                                                    title="Unblock"
+                                                    title="Desbloquear"
                                                 >
                                                     <Check size={14} />
                                                 </button>
