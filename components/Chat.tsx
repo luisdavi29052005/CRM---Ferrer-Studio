@@ -43,8 +43,9 @@ export const Chat: React.FC<ChatProps> = ({
   onSelectChat: propOnSelectChat
 }) => {
   const { t } = useTranslation();
-  const [sessionName] = useState('default'); // Default session
-  const [status, setStatus] = useState<'WORKING' | 'SCAN_QR_CODE' | 'STARTING' | 'STOPPED' | 'FAILED'>('STARTING');
+  const [availableSessions, setAvailableSessions] = useState<any[]>([]);
+  const [sessionName, setSessionName] = useState<string>(''); // Will be set after loading sessions
+  const [status, setStatus] = useState<'WORKING' | 'SCAN_QR_CODE' | 'STARTING' | 'STOPPED' | 'FAILED' | 'NO_SESSION'>('STARTING');
 
 
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
@@ -113,8 +114,35 @@ export const Chat: React.FC<ChatProps> = ({
     }
   }, [propLeads, propApifyLeads]);
 
+  // 0. Load Available Sessions
+  useEffect(() => {
+    const loadSessions = async () => {
+      try {
+        const sessions = await wahaService.getSessions();
+        setAvailableSessions(sessions);
+
+        // Auto-select first session if none selected
+        if (sessions.length > 0 && !sessionName) {
+          setSessionName(sessions[0].name);
+        } else if (sessions.length === 0) {
+          setStatus('NO_SESSION');
+        }
+      } catch (error) {
+        console.error('Error loading WAHA sessions:', error);
+        setStatus('NO_SESSION');
+      }
+    };
+
+    loadSessions();
+    // Refresh sessions list every 30s
+    const interval = setInterval(loadSessions, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   // 1. Session Monitoring (Simple Polling)
   const checkSessionStatus = useCallback(async () => {
+    if (!sessionName) return; // Don't check if no session selected
+
     try {
       try {
         const session = await wahaService.getSession(sessionName);
@@ -140,17 +168,19 @@ export const Chat: React.FC<ChatProps> = ({
           }
         }
       } catch (e) {
-        // Session doesn't exist, try to create/start
-        console.log("Session not found, starting...");
-        await wahaService.startSession(sessionName);
+        // Session doesn't exist or error
+        console.log("Session not found or error:", e);
+        setStatus('STOPPED');
       }
     } catch (error) {
       console.error("Error checking WAHA session:", error);
     }
   }, [sessionName, qrCodeUrl, wahaProfile, leads]);
 
-  // Poll status every 3s
+  // Poll status every 3s (only if session is selected)
   useEffect(() => {
+    if (!sessionName) return;
+
     checkSessionStatus();
     const interval = setInterval(checkSessionStatus, 3000);
     return () => clearInterval(interval);
@@ -198,7 +228,31 @@ export const Chat: React.FC<ChatProps> = ({
 
   // Merge chats with lead info for active chat
   const chatList = chats.map(chat => {
-    const lead = leads.find(l => l.chat_id === chat.id);
+    let lead = leads.find(l => l.chat_id === chat.id || `${l.phone}@c.us` === chat.id);
+    if (!lead && apifyLeads && apifyLeads.length > 0) {
+      const apify = apifyLeads.find(l => l.phone && (`${l.phone}@c.us` === chat.id || l.phone === chat.id));
+      if (apify) {
+        // Create a compatible Lead object from Apify data
+        lead = {
+          id: apify.id,
+          chat_id: apify.phone,
+          name: apify.title || 'Unknown',
+          business: apify.title || '',
+          phone: apify.phone,
+          city: apify.city || '',
+          state: apify.state || '',
+          category: apify.category || '',
+          status: apify.status, // Crucial for Handoff UI
+          stage: 'New',
+          temperature: 'Cold',
+          score: 0,
+          source: 'apify',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          user_id: ''
+        } as any;
+      }
+    }
     return { ...chat, lead, chatID: chat.id }; // Ensure chatID compatibility
   });
 
@@ -311,7 +365,7 @@ export const Chat: React.FC<ChatProps> = ({
         const batch = idsToFetch.slice(i, i + batchSize);
         await Promise.all(batch.map(async (chatId) => {
           try {
-            const url = await fetchContactProfilePic(chatId);
+            const url = await fetchContactProfilePic(chatId, sessionName || 'default');
             if (url) {
               newPics[chatId] = url;
             }
@@ -324,10 +378,10 @@ export const Chat: React.FC<ChatProps> = ({
       }
     };
 
-    if (chats.length > 0 || leads.length > 0) {
+    if ((chats.length > 0 || leads.length > 0) && sessionName) {
       fetchImages();
     }
-  }, [chats.length, leads.length]); // Only re-run if counts change significantly to avoid loops
+  }, [chats.length, leads.length, sessionName]); // Only re-run if counts change significantly to avoid loops
 
   // 4. Realtime Subscription for Messages (Active Chat)
   useEffect(() => {
@@ -348,13 +402,15 @@ export const Chat: React.FC<ChatProps> = ({
         .on(
           'postgres_changes',
           {
-            event: 'INSERT',
+            event: '*',
             schema: 'public',
             table: 'whatsapp_waha_messages',
             filter: `chat_id=eq.${chatIdInt}`
           },
           (payload) => {
             const newMsg = payload.new as any;
+            if (!newMsg) return; // Handle DELETE if needed, or ignore
+
             const wahaMsg: WahaMessage = {
               id: newMsg.message_id || newMsg.id.toString(),
               timestamp: new Date(newMsg.message_timestamp).getTime() / 1000,
@@ -365,11 +421,20 @@ export const Chat: React.FC<ChatProps> = ({
               hasMedia: newMsg.has_media,
               mediaUrl: newMsg.media_url,
               mediaType: newMsg.type,
-              caption: newMsg.media_caption
+              caption: newMsg.media_caption,
+              isAiGenerated: newMsg.is_ai_generated,
+              agentName: newMsg.agent_name
             };
 
             setMessages(prev => {
-              if (prev.some(m => m.id === wahaMsg.id)) return prev;
+              const existingIndex = prev.findIndex(m => m.id === wahaMsg.id);
+              if (existingIndex !== -1) {
+                // UPDATE existing message
+                const updatedMessages = [...prev];
+                updatedMessages[existingIndex] = wahaMsg;
+                return updatedMessages;
+              }
+              // INSERT new message
               return [...prev, wahaMsg].sort((a, b) => a.timestamp - b.timestamp);
             });
 
@@ -429,8 +494,37 @@ export const Chat: React.FC<ChatProps> = ({
       )
       .subscribe();
 
+    // CRM Leads & Apify Subscription
+    const leadsChannel = supabase
+      .channel('public:leads_apify_changes')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'leads' },
+        (payload) => {
+          const updated = payload.new as Lead;
+          setLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'apify' },
+        async (payload) => {
+          // For Apify, just refetch to be safe as we might need to move it to leads if deleted
+          // Or just update status if it's an update
+          if (payload.eventType === 'UPDATE') {
+            const updated = payload.new as any;
+            setApifyLeads(prev => prev.map(l => l.id === updated.id ? updated : l));
+          } else {
+            const latestApify = await fetchApifyLeads().catch(() => []);
+            if (latestApify) setApifyLeads(latestApify);
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(leadsChannel);
     };
   }, []);
 
@@ -531,18 +625,55 @@ export const Chat: React.FC<ChatProps> = ({
       setMessages(prev => [...prev, newMessage]);
 
       if (file) {
-        // Send media
-        // Use sendFile instead of sendImage to avoid GOWS engine restrictions
-        await wahaService.sendFile({
-          session: sessionName,
-          chatId: selectedChatId,
-          file: {
-            mimetype: file.type,
-            filename: file.name,
-            url: base64
-          },
-          caption: text
-        });
+        // Send media - use appropriate endpoint based on file type
+        const isImage = file.type.startsWith('image/');
+        const isVideo = file.type.startsWith('video/');
+        const isAudio = file.type.startsWith('audio/');
+
+        if (isImage) {
+          await wahaService.sendImage({
+            session: sessionName,
+            chatId: selectedChatId,
+            file: {
+              mimetype: file.type,
+              filename: file.name,
+              url: base64
+            },
+            caption: text
+          });
+        } else if (isVideo) {
+          await wahaService.sendVideo({
+            session: sessionName,
+            chatId: selectedChatId,
+            file: {
+              mimetype: file.type,
+              filename: file.name,
+              url: base64
+            },
+            caption: text
+          });
+        } else if (isAudio) {
+          await wahaService.sendVoice({
+            session: sessionName,
+            chatId: selectedChatId,
+            file: {
+              mimetype: file.type,
+              url: base64
+            }
+          });
+        } else {
+          // Generic file
+          await wahaService.sendFile({
+            session: sessionName,
+            chatId: selectedChatId,
+            file: {
+              mimetype: file.type,
+              filename: file.name,
+              url: base64
+            },
+            caption: text
+          });
+        }
       } else {
         // Send text
         await wahaService.sendText({
@@ -662,7 +793,24 @@ export const Chat: React.FC<ChatProps> = ({
     );
   }
 
-  if (status === 'STARTING') {
+  if (status === 'NO_SESSION' || (status === 'STARTING' && !sessionName)) {
+    return (
+      <div className="flex flex-col h-full items-center justify-center bg-[#0F0F0F] text-zinc-200">
+        <div className="w-20 h-20 bg-zinc-900/50 rounded-full flex items-center justify-center mb-6 border border-white/5">
+          <Smartphone size={40} className="text-zinc-600" />
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Nenhuma Sessão Encontrada</h2>
+        <p className="text-zinc-500 text-center max-w-md mb-6">
+          Não foi encontrada nenhuma sessão WAHA. Crie uma sessão no painel do WAHA para começar.
+        </p>
+        <p className="text-xs text-zinc-600 font-mono">
+          Sessões disponíveis: {availableSessions.length}
+        </p>
+      </div>
+    );
+  }
+
+  if (status === 'STARTING' && sessionName) {
     return <ChatLoading />;
   }
 
@@ -679,11 +827,40 @@ export const Chat: React.FC<ChatProps> = ({
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {/* Session Selector */}
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900/50 rounded-lg border border-white/5">
+            <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Sessão:</span>
+            <select
+              value={sessionName}
+              onChange={(e) => {
+                setSessionName(e.target.value);
+                setWahaProfile(null); // Reset profile when changing session
+              }}
+              className="bg-transparent text-sm font-medium text-zinc-200 focus:outline-none cursor-pointer"
+            >
+              {availableSessions.length === 0 ? (
+                <option value="">Nenhuma sessão</option>
+              ) : (
+                availableSessions.map((s) => (
+                  <option key={s.name} value={s.name} className="bg-zinc-900 text-zinc-200">
+                    {s.name}
+                  </option>
+                ))
+              )}
+            </select>
+            {/* Status Indicator */}
+            <div className={`w-2 h-2 rounded-full ${status === 'WORKING' ? 'bg-emerald-500' :
+              status === 'SCAN_QR_CODE' ? 'bg-amber-500 animate-pulse' :
+                status === 'STARTING' ? 'bg-blue-500 animate-pulse' :
+                  'bg-red-500'
+              }`} title={status} />
+          </div>
+
           {/* Session Control Buttons */}
           <div className="flex items-center gap-1 px-2 py-1 bg-zinc-900/50 rounded-lg border border-white/5">
             <button
               onClick={handleStartSession}
-              disabled={status === 'WORKING' || status === 'STARTING'}
+              disabled={status === 'WORKING' || status === 'STARTING' || !sessionName}
               title="Iniciar Sessão"
               className="p-2 hover:bg-emerald-500/20 text-zinc-400 hover:text-emerald-400 rounded-md transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             >
@@ -691,7 +868,7 @@ export const Chat: React.FC<ChatProps> = ({
             </button>
             <button
               onClick={handleStopSession}
-              disabled={status === 'STOPPED' || status === 'FAILED'}
+              disabled={status === 'STOPPED' || status === 'FAILED' || !sessionName}
               title="Parar Sessão"
               className="p-2 hover:bg-amber-500/20 text-zinc-400 hover:text-amber-400 rounded-md transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             >
@@ -699,7 +876,7 @@ export const Chat: React.FC<ChatProps> = ({
             </button>
             <button
               onClick={handleLogout}
-              disabled={status !== 'WORKING'}
+              disabled={status !== 'WORKING' || !sessionName}
               title="Desconectar (Logout)"
               className="p-2 hover:bg-red-500/20 text-zinc-400 hover:text-red-400 rounded-md transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             >
@@ -707,7 +884,7 @@ export const Chat: React.FC<ChatProps> = ({
             </button>
             <button
               onClick={handleRestart}
-              disabled={status === 'STARTING'}
+              disabled={status === 'STARTING' || !sessionName}
               title="Reiniciar Sessão"
               className="p-2 hover:bg-blue-500/20 text-zinc-400 hover:text-blue-400 rounded-md transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             >
@@ -753,27 +930,42 @@ export const Chat: React.FC<ChatProps> = ({
           />
         </div>
 
-        {/* Right Panel: Chat Window */}
-        <div className="flex-1 bg-[#09090b] border border-white/5 rounded-2xl overflow-hidden flex flex-col shadow-xl relative">
-          {selectedChatId && activeChat ? (
-            <ChatWindow
-              activeChat={activeChat}
-              messages={messages}
-              onToggleContactInfo={() => setShowContactInfo(!showContactInfo)}
-              onBack={() => handleSelectChat(null)}
-              profilePic={localProfilePics[selectedChatId]}
-              presence={contactPresence}
-              currentUserId={wahaProfile?.id}
-              onSendMessage={handleSendMessage}
-              onSendMedia={handleSendMedia}
-            />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 bg-[#09090b]">
-              <div className="w-16 h-16 bg-zinc-900/50 rounded-full flex items-center justify-center mb-4 border border-white/5">
-                <MessageSquare size={32} className="text-zinc-600" />
+        {/* Right Panel: Chat Window + Contact Info */}
+        <div className="flex-1 bg-[#09090b] border border-white/5 rounded-2xl overflow-hidden flex shadow-xl">
+          {/* Chat Window Section */}
+          <div className={`flex-1 flex flex-col min-w-0 ${showContactInfo && activeChat ? 'hidden md:flex' : 'flex'}`}>
+            {selectedChatId && activeChat ? (
+              <ChatWindow
+                activeChat={activeChat}
+                messages={messages}
+                onToggleContactInfo={() => setShowContactInfo(!showContactInfo)}
+                onBack={() => handleSelectChat(null)}
+                profilePic={localProfilePics[selectedChatId]}
+                presence={contactPresence}
+                currentUserId={wahaProfile?.id}
+                onSendMessage={handleSendMessage}
+                onSendMedia={handleSendMedia}
+                isSending={isSending}
+              />
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 bg-[#09090b]">
+                <div className="w-16 h-16 bg-zinc-900/50 rounded-full flex items-center justify-center mb-4 border border-white/5">
+                  <MessageSquare size={32} className="text-zinc-600" />
+                </div>
+                <h3 className="text-lg font-medium text-zinc-300 mb-1">Bem-vindo ao Chat</h3>
+                <p className="text-sm max-w-xs text-center text-zinc-500">Selecione uma conversa ao lado para começar o atendimento.</p>
               </div>
-              <h3 className="text-lg font-medium text-zinc-300 mb-1">Bem-vindo ao Chat</h3>
-              <p className="text-sm max-w-xs text-center text-zinc-500">Selecione uma conversa ao lado para começar o atendimento.</p>
+            )}
+          </div>
+
+          {/* Contact Info Section - Inside the chat panel */}
+          {showContactInfo && activeChat && (
+            <div className="w-full md:w-80 h-full border-l border-white/5 shrink-0">
+              <ContactInfo
+                lead={activeChat.lead}
+                onClose={() => setShowContactInfo(false)}
+                profilePic={localProfilePics[activeChat.id]}
+              />
             </div>
           )}
         </div>
@@ -789,20 +981,6 @@ export const Chat: React.FC<ChatProps> = ({
           }}
           onCancel={() => setPreviewFile(null)}
         />
-      )}
-
-      {/* Contact Info Sidebar (Right) - Optional, maybe overlay or inside right panel? 
-          For now keeping it as overlay or hidden to respect strict 2-panel layout request 
-          unless user opens it. 
-      */}
-      {showContactInfo && activeChat && (
-        <div className="absolute right-8 top-8 bottom-8 w-80 bg-[#09090b] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden">
-          <ContactInfo
-            chat={activeChat}
-            onClose={() => setShowContactInfo(false)}
-            profilePic={localProfilePics[activeChat.id]}
-          />
-        </div>
       )}
     </div>
   );

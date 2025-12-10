@@ -10,7 +10,8 @@ import {
     startBlastBackend,
     stopBlastBackend,
     fetchBlastRun,
-    fetchBlastLogs
+    fetchBlastLogs,
+    uploadChatMedia
 } from '../services/supabaseService';
 import { ApifyLead } from '../types';
 
@@ -34,8 +35,12 @@ export const ApifyBlastPage = forwardRef<ApifyBlastPageHandle>((props, ref) => {
     const [followUpMessage, setFollowUpMessage] = useState('');
     const [blastStrategy, setBlastStrategy] = useState<'new_only' | 'follow_up' | 'smart_mix'>('new_only');
     const [messageFormat, setMessageFormat] = useState<'structured' | 'free_text'>('structured');
-    const [blastInterval, setBlastInterval] = useState(10);
+    const [minBlastInterval, setMinBlastInterval] = useState(10);
+    const [maxBlastInterval, setMaxBlastInterval] = useState(30);
     const [blastBatchSize, setBlastBatchSize] = useState(20);
+    const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+    const [mediaType, setMediaType] = useState<'image' | 'video' | 'voice'>('image');
+    const [isUploading, setIsUploading] = useState(false);
     const [blastPauseMinutes, setBlastPauseMinutes] = useState(5);
     const [blastFilters, setBlastFilters] = useState({ city: '', category: '' });
     const [isBlasting, setIsBlasting] = useState(false);
@@ -132,17 +137,19 @@ export const ApifyBlastPage = forwardRef<ApifyBlastPageHandle>((props, ref) => {
         }
         const totalLeads = eligibleLeads.length;
         const batches = Math.ceil(totalLeads / blastBatchSize);
-        const totalSeconds = (batches * blastInterval) + (totalLeads * 2);
+        // Estimate using average interval
+        const avgInterval = (minBlastInterval + maxBlastInterval) / 2;
+        const totalSeconds = (batches * avgInterval) + (totalLeads * 2);
 
         const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
+        const seconds = Math.floor(totalSeconds % 60);
 
         if (minutes > 0) {
             setEstimatedTime(`${minutes}m ${seconds}s`);
         } else {
             setEstimatedTime(`${seconds}s`);
         }
-    }, [eligibleLeads.length, blastBatchSize, blastInterval]);
+    }, [eligibleLeads.length, blastBatchSize, minBlastInterval, maxBlastInterval]);
 
     // Poll for Blast Updates
     useEffect(() => {
@@ -264,7 +271,7 @@ export const ApifyBlastPage = forwardRef<ApifyBlastPageHandle>((props, ref) => {
             },
             blastMessage,
             blastBatchSize,
-            blastInterval,
+            Math.floor((minBlastInterval + maxBlastInterval) / 2), // Use average for DB record
             blastName // Pass blast name
         );
 
@@ -280,8 +287,11 @@ export const ApifyBlastPage = forwardRef<ApifyBlastPageHandle>((props, ref) => {
         try {
             await startBlastBackend(runId, {
                 batchSize: blastBatchSize,
-                intervalSeconds: blastInterval,
+                minInterval: minBlastInterval,
+                maxInterval: maxBlastInterval,
                 messageTemplate: blastMessage,
+                mediaUrl: mediaUrl,
+                mediaType: mediaType,
                 filters: blastFilters,
                 strategy: blastStrategy,
                 messageFormat,
@@ -366,8 +376,67 @@ export const ApifyBlastPage = forwardRef<ApifyBlastPageHandle>((props, ref) => {
                         </div>
                     </div>
 
-                    <div className="col-span-12 md:col-span-9 flex flex-col">
-                        <Label>Mensagem Principal</Label>
+                </div>
+
+                <div className="col-span-12 md:col-span-9 flex flex-col space-y-4">
+                    {/* Media Attachment */}
+                    <div className="bg-black/20 border border-white/10 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                            <Label>Anexo de Mídia (Opcional)</Label>
+                            {mediaUrl && (
+                                <button
+                                    onClick={() => setMediaUrl(null)}
+                                    className="text-[10px] text-red-500 hover:text-red-400"
+                                >
+                                    Remover
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex gap-4 items-start">
+                            <div className="flex-1">
+                                <div className="relative group">
+                                    <input
+                                        type="file"
+                                        accept="image/*,video/*,audio/*"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                setIsUploading(true);
+                                                // Determine type
+                                                if (file.type.startsWith('image/')) setMediaType('image');
+                                                else if (file.type.startsWith('video/')) setMediaType('video');
+                                                else if (file.type.startsWith('audio/')) setMediaType('voice');
+
+                                                const { url, error } = await uploadChatMedia(file);
+                                                if (url) {
+                                                    setMediaUrl(url);
+                                                } else {
+                                                    alert(`Erro ao fazer upload: ${error}`);
+                                                }
+                                                setIsUploading(false);
+                                            }
+                                        }}
+                                        className="w-full text-xs text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-[10px] file:font-semibold file:bg-zinc-800 file:text-zinc-300 hover:file:bg-zinc-700 cursor-pointer"
+                                        disabled={isUploading}
+                                    />
+                                    {isUploading && <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-zinc-500">Enviando...</div>}
+                                </div>
+                                <p className="text-[10px] text-zinc-600 mt-1">
+                                    Selecione uma imagem, vídeo ou áudio para enviar junto com a mensagem.
+                                </p>
+                            </div>
+                            {mediaUrl && mediaType === 'image' && (
+                                <img src={mediaUrl} alt="Preview" className="h-16 w-16 object-cover rounded-md border border-white/10" />
+                            )}
+                            {mediaUrl && mediaType === 'video' && (
+                                <video src={mediaUrl} className="h-16 w-16 object-cover rounded-md border border-white/10" />
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Message Principal */}
+                    <div>
+                        <Label>Mensagem Principal {mediaUrl && "(Será usada como legenda)"}</Label>
                         <textarea
                             value={blastMessage}
                             onChange={(e) => setBlastMessage(e.target.value)}
@@ -378,158 +447,167 @@ export const ApifyBlastPage = forwardRef<ApifyBlastPageHandle>((props, ref) => {
                             Use {'{Oi|Olá}'} para spintax. Variáveis: {'{{name}}'}, {'{{city}}'}.
                         </p>
                     </div>
-                </div>
 
-                {/* Divider */}
-                <div className="h-px bg-white/5 w-full" />
+                    {/* Divider */}
+                    <div className="h-px bg-white/5 w-full" />
 
-                {/* Bottom Section: Config & Monitoring */}
-                <div className="grid grid-cols-12 divide-x divide-white/5">
+                    {/* Bottom Section: Config & Monitoring */}
+                    <div className="grid grid-cols-12 divide-x divide-white/5">
 
-                    {/* 2. Configuration & Testing (Left Column) */}
-                    <div className="col-span-12 lg:col-span-7">
-                        <SectionHeader title="2. Configuração e Teste" />
-                        <div className="p-6 space-y-6">
-                            {/* Filters Row */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <Label>Cidade</Label>
-                                    <div className="relative">
-                                        <select
-                                            value={blastFilters.city}
-                                            onChange={(e) => setBlastFilters(prev => ({ ...prev, city: e.target.value }))}
-                                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 appearance-none cursor-pointer text-xs hover:border-white/20 transition-all"
-                                        >
-                                            <option value="" className="bg-[#09090b]">Todas as Cidades</option>
-                                            {availableCities.map(city => (
-                                                <option key={city} value={city} className="bg-[#09090b]">{city}</option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
+                        {/* 2. Configuration & Testing (Left Column) */}
+                        <div className="col-span-12 lg:col-span-7">
+                            <SectionHeader title="2. Configuração e Teste" />
+                            <div className="p-6 space-y-6">
+                                {/* Filters Row */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <Label>Cidade</Label>
+                                        <div className="relative">
+                                            <select
+                                                value={blastFilters.city}
+                                                onChange={(e) => setBlastFilters(prev => ({ ...prev, city: e.target.value }))}
+                                                className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 appearance-none cursor-pointer text-xs hover:border-white/20 transition-all"
+                                            >
+                                                <option value="" className="bg-[#09090b]">Todas as Cidades</option>
+                                                {availableCities.map(city => (
+                                                    <option key={city} value={city} className="bg-[#09090b]">{city}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Label>Categoria</Label>
+                                        <div className="relative">
+                                            <select
+                                                value={blastFilters.category}
+                                                onChange={(e) => setBlastFilters(prev => ({ ...prev, category: e.target.value }))}
+                                                className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 appearance-none cursor-pointer text-xs hover:border-white/20 transition-all"
+                                            >
+                                                <option value="" className="bg-[#09090b]">Todas as Categorias</option>
+                                                {availableCategories.map(cat => (
+                                                    <option key={cat} value={cat} className="bg-[#09090b]">{cat}</option>
+                                                ))}
+                                            </select>
+                                            <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
+                                        </div>
                                     </div>
                                 </div>
-                                <div>
-                                    <Label>Categoria</Label>
-                                    <div className="relative">
-                                        <select
-                                            value={blastFilters.category}
-                                            onChange={(e) => setBlastFilters(prev => ({ ...prev, category: e.target.value }))}
-                                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 appearance-none cursor-pointer text-xs hover:border-white/20 transition-all"
-                                        >
-                                            <option value="" className="bg-[#09090b]">Todas as Categorias</option>
-                                            {availableCategories.map(cat => (
-                                                <option key={cat} value={cat} className="bg-[#09090b]">{cat}</option>
-                                            ))}
-                                        </select>
-                                        <ChevronDown size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-600 pointer-events-none" />
-                                    </div>
-                                </div>
-                            </div>
 
-                            {/* Campaign Name */}
-                            <div>
-                                <Label>Nome da Campanha</Label>
-                                <input
-                                    type="text"
-                                    value={blastName}
-                                    onChange={(e) => setBlastName(e.target.value)}
-                                    placeholder="ex: Promoção Novembro"
-                                    className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 text-xs placeholder:text-zinc-700 hover:border-white/20 transition-all"
-                                />
-                            </div>
-
-                            {/* Interval / Batch / Pause */}
-                            <div className="grid grid-cols-3 gap-4">
+                                {/* Campaign Name */}
                                 <div>
-                                    <Label>Intervalo (s)</Label>
-                                    <input
-                                        type="number"
-                                        value={blastInterval}
-                                        onChange={(e) => setBlastInterval(Number(e.target.value))}
-                                        className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 text-xs hover:border-white/20 transition-all"
-                                    />
-                                </div>
-                                <div>
-                                    <Label>Tamanho do Lote</Label>
-                                    <input
-                                        type="number"
-                                        value={blastBatchSize}
-                                        onChange={(e) => setBlastBatchSize(Number(e.target.value))}
-                                        className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 text-xs hover:border-white/20 transition-all"
-                                    />
-                                </div>
-                                <div>
-                                    <Label>Pausa (min)</Label>
-                                    <input
-                                        type="number"
-                                        value={blastPauseMinutes}
-                                        onChange={(e) => setBlastPauseMinutes(Number(e.target.value))}
-                                        className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 text-xs hover:border-white/20 transition-all"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Test Blast */}
-                            <div>
-                                <Label>Teste de Disparo</Label>
-                                <div className="flex gap-2">
+                                    <Label>Nome da Campanha</Label>
                                     <input
                                         type="text"
-                                        value={testNumber}
-                                        onChange={(e) => setTestNumber(e.target.value)}
-                                        placeholder="5511999999999"
-                                        className="flex-1 bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 font-mono text-xs hover:border-white/20 transition-all"
+                                        value={blastName}
+                                        onChange={(e) => setBlastName(e.target.value)}
+                                        placeholder="ex: Promoção Novembro"
+                                        className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 text-xs placeholder:text-zinc-700 hover:border-white/20 transition-all"
                                     />
-                                    <button
-                                        onClick={handleTestBlast}
-                                        className="px-4 py-2 bg-transparent hover:bg-white/5 text-zinc-400 hover:text-zinc-200 rounded-lg border border-white/10 hover:border-white/20 transition-all text-xs font-bold uppercase tracking-wide"
-                                    >
-                                        Enviar Teste
-                                    </button>
+                                </div>
+
+                                {/* Interval / Batch / Pause */}
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <Label>Min (s)</Label>
+                                        <input
+                                            type="number"
+                                            value={minBlastInterval}
+                                            onChange={(e) => setMinBlastInterval(Number(e.target.value))}
+                                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 text-xs hover:border-white/20 transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Max (s)</Label>
+                                        <input
+                                            type="number"
+                                            value={maxBlastInterval}
+                                            onChange={(e) => setMaxBlastInterval(Number(e.target.value))}
+                                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 text-xs hover:border-white/20 transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Tamanho do Lote</Label>
+                                        <input
+                                            type="number"
+                                            value={blastBatchSize}
+                                            onChange={(e) => setBlastBatchSize(Number(e.target.value))}
+                                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 text-xs hover:border-white/20 transition-all"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label>Pausa (min)</Label>
+                                        <input
+                                            type="number"
+                                            value={blastPauseMinutes}
+                                            onChange={(e) => setBlastPauseMinutes(Number(e.target.value))}
+                                            className="w-full bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 text-xs hover:border-white/20 transition-all"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Test Blast */}
+                                <div>
+                                    <Label>Teste de Disparo</Label>
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={testNumber}
+                                            onChange={(e) => setTestNumber(e.target.value)}
+                                            placeholder="5511999999999"
+                                            className="flex-1 bg-black/20 border border-white/10 rounded-lg py-2 px-3 text-zinc-200 outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 font-mono text-xs hover:border-white/20 transition-all"
+                                        />
+                                        <button
+                                            onClick={handleTestBlast}
+                                            className="px-4 py-2 bg-transparent hover:bg-white/5 text-zinc-400 hover:text-zinc-200 rounded-lg border border-white/10 hover:border-white/20 transition-all text-xs font-bold uppercase tracking-wide"
+                                        >
+                                            Enviar Teste
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* 3. Live Monitoring (Right Column) */}
-                    <div className="col-span-12 lg:col-span-5">
-                        <SectionHeader title="3. Monitoramento em Tempo Real" />
-                        <div className="p-6 flex flex-col h-full">
-                            {/* Stats Headers */}
-                            <div className="grid grid-cols-2 gap-4 mb-4">
-                                <div>
-                                    <Label>Progresso</Label>
-                                    <div className="text-xl font-mono text-zinc-200">
-                                        {blastProgress.current} <span className="text-zinc-600 text-sm">/ {blastProgress.total}</span>
+                        {/* 3. Live Monitoring (Right Column) */}
+                        <div className="col-span-12 lg:col-span-5">
+                            <SectionHeader title="3. Monitoramento em Tempo Real" />
+                            <div className="p-6 flex flex-col h-full">
+                                {/* Stats Headers */}
+                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <Label>Progresso</Label>
+                                        <div className="text-xl font-mono text-zinc-200">
+                                            {blastProgress.current} <span className="text-zinc-600 text-sm">/ {blastProgress.total}</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <Label>Sucesso</Label>
+                                        <div className="text-xl font-mono text-emerald-400">
+                                            {blastProgress.current > 0 ? Math.round((blastProgress.success / blastProgress.current) * 100) : 0}%
+                                        </div>
                                     </div>
                                 </div>
-                                <div>
-                                    <Label>Sucesso</Label>
-                                    <div className="text-xl font-mono text-emerald-400">
-                                        {blastProgress.current > 0 ? Math.round((blastProgress.success / blastProgress.current) * 100) : 0}%
-                                    </div>
-                                </div>
-                            </div>
 
-                            {/* Logs List View */}
-                            <div className="flex-1 bg-black/20 border border-white/5 rounded-lg overflow-hidden flex flex-col">
-                                <div className="px-3 py-2 border-b border-white/5 bg-white/[0.02]">
-                                    <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Log de Atividade</span>
-                                </div>
-                                <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
-                                    {blastLogs.length === 0 ? (
-                                        <div className="p-4 text-center text-zinc-600 text-xs italic">
-                                            Aguardando início do disparo...
-                                        </div>
-                                    ) : (
-                                        <div className="divide-y divide-white/5">
-                                            {blastLogs.map((log, i) => (
-                                                <div key={i} className="px-3 py-2 text-[10px] font-mono text-zinc-400 hover:bg-white/[0.02] transition-colors truncate">
-                                                    {log}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                {/* Logs List View */}
+                                <div className="flex-1 bg-black/20 border border-white/5 rounded-lg overflow-hidden flex flex-col">
+                                    <div className="px-3 py-2 border-b border-white/5 bg-white/[0.02]">
+                                        <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest">Log de Atividade</span>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto custom-scrollbar p-0">
+                                        {blastLogs.length === 0 ? (
+                                            <div className="p-4 text-center text-zinc-600 text-xs italic">
+                                                Aguardando início do disparo...
+                                            </div>
+                                        ) : (
+                                            <div className="divide-y divide-white/5">
+                                                {blastLogs.map((log, i) => (
+                                                    <div key={i} className="px-3 py-2 text-[10px] font-mono text-zinc-400 hover:bg-white/[0.02] transition-colors truncate">
+                                                        {log}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>

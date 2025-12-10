@@ -6,15 +6,16 @@ import { User, Phone, MapPin, BrainCircuit, Calendar, X, Tag, FileText } from 'l
 interface ContactInfoProps {
     lead?: Lead;
     onClose: () => void;
+    profilePic?: string;
 }
 
-export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
+export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose, profilePic }) => {
     if (!lead) return null;
 
     return (
-        <div className="w-80 h-full flex flex-col bg-[#09090b] border-l border-zinc-900 animate-in slide-in-from-right duration-300">
+        <div className="w-full h-full flex flex-col bg-[#09090b] border-l border-zinc-900 animate-in slide-in-from-right duration-300 overflow-hidden">
             {/* Header */}
-            <div className="p-6 flex items-center justify-between shrink-0">
+            <div className="p-4 md:p-6 flex items-center justify-between shrink-0 border-b border-white/5 md:border-b-0">
                 <h3 className="text-lg font-bold text-zinc-100 tracking-tight">Informações de Contato</h3>
                 <button
                     onClick={onClose}
@@ -24,18 +25,18 @@ export const ContactInfo: React.FC<ContactInfoProps> = ({ lead, onClose }) => {
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 pt-0 space-y-8">
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 pt-0 space-y-6 md:space-y-8">
                 {/* Profile Section */}
                 <div className="flex flex-col items-center text-center">
-                    <div className="w-24 h-24 rounded-full bg-zinc-900 flex items-center justify-center text-zinc-500 font-bold text-3xl mb-4">
-                        {lead.avatar_url ? (
-                            <img src={lead.avatar_url} alt={lead.name} className="w-full h-full object-cover rounded-full" />
+                    <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-zinc-900 flex items-center justify-center text-zinc-500 font-bold text-2xl md:text-3xl mb-3 md:mb-4 overflow-hidden border border-white/10">
+                        {profilePic || lead.avatar_url ? (
+                            <img src={profilePic || lead.avatar_url} alt={lead.name} className="w-full h-full object-cover" />
                         ) : (
                             <span>{lead.business?.charAt(0) || lead.name?.charAt(0) || '?'}</span>
                         )}
                     </div>
-                    <h2 className="text-xl font-bold text-zinc-100 mb-1">{lead.business || lead.name}</h2>
-                    <p className="text-sm text-zinc-500 font-mono">{lead.phone}</p>
+                    <h2 className="text-lg md:text-xl font-bold text-zinc-100 mb-1 break-words max-w-full px-2">{lead.business || lead.name}</h2>
+                    <p className="text-xs md:text-sm text-zinc-500 font-mono break-all">{lead.phone}</p>
                 </div>
 
                 {/* AI Score Card - Minimalist */}

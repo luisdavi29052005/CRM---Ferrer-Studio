@@ -100,4 +100,56 @@ export interface Agent {
   is_active: boolean;
   user_id?: string;
   split_messages?: boolean;
+  session?: string; // WAHA session name to use for this agent
+}
+
+// Social Proof Message
+export interface SocialProofMessage {
+  id: string;
+  text: string;
+  time: string;
+  fromMe: boolean;
+  type?: 'text' | 'audio';
+  status?: 'sent' | 'delivered' | 'read';
+}
+
+// Social Proof Configuration
+export interface SocialProofConfig {
+  id: string;
+  created_at?: string;
+  updated_at?: string;
+  user_id?: string;
+  name: string;
+  category: string;
+  model: string;
+  ai_prompt?: string;
+  temperature: number;
+  avatar_url?: string;
+  contact_name?: string;
+  is_active: boolean;
+  messages: SocialProofMessage[];
+}
+
+// Social Proof Item (Generated Proof)
+export interface SocialProofItem {
+  id: string;
+  created_at?: string;
+  album_id: string;
+  contact_name: string;
+  messages: SocialProofMessage[];
+}
+
+
+// Apify Lead
+export interface ApifyLead {
+  id: string;
+  title: string;
+  phone: string;
+  city: string;
+  state: string;
+  category: string;
+  url: string;
+  source: string;
+  created_at: string;
+  status: 'sent' | 'not sent' | 'error' | 'lost' | 'NEEDS_EDIT' | boolean | string;
 }

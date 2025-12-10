@@ -40,11 +40,14 @@ class BlastService {
     async runBlastLoop(runId, config) {
         const {
             batchSize = 5,
-            intervalSeconds = 60,
+            minInterval = 10,
+            maxInterval = 30,
             messageTemplate,
             filters,
             strategy = 'new_only', // 'new_only', 'follow_up', 'smart_mix'
-            messageFormat = 'text', // 'text', 'image', 'video', 'audio', 'document'
+            messageFormat = 'text', // 'text', 'image', 'video', 'voice'
+            mediaUrl, // New: URL for media
+            mediaType = 'image', // New: 'image', 'video', 'voice'
             followUpMessage
         } = config;
 
@@ -102,7 +105,9 @@ class BlastService {
                         const messageToSend = this.determineMessage(lead, strategy, messageTemplate, followUpMessage);
 
                         // sendMessage now returns { success, error }
-                        const result = await this.sendMessage(lead.phone, messageToSend, messageFormat);
+                        // Pass media config if format is not text
+                        const mediaConfig = (messageFormat !== 'text' && mediaUrl) ? { url: mediaUrl, type: mediaType } : null;
+                        const result = await this.sendMessage(lead.phone, messageToSend, messageFormat, mediaConfig);
 
                         if (result.success) {
                             console.log(`[Blast ${runId}] Sent to ${lead.phone} successfully.`);
@@ -136,9 +141,13 @@ class BlastService {
                 await this.incrementRunStats(runId, successCount, failedCount);
 
                 // 4. Wait for interval
-                console.log(`[Blast ${runId}] Waiting ${intervalSeconds}s before next batch...`);
+                // 4. Wait for interval
+                // Calculate Random Delay
+                const delaySeconds = Math.floor(Math.random() * (maxInterval - minInterval + 1) + minInterval);
+                console.log(`[Blast ${runId}] Waiting ${delaySeconds}s (Range: ${minInterval}-${maxInterval}s) before next batch...`);
+
                 await new Promise((resolve) => {
-                    const timeout = setTimeout(resolve, intervalSeconds * 1000);
+                    const timeout = setTimeout(resolve, delaySeconds * 1000);
                     const run = this.activeRuns.get(runId);
                     if (run) run.timeoutId = timeout;
                 });
@@ -218,25 +227,75 @@ class BlastService {
         return template.replace('{{name}}', name);
     }
 
-    async sendMessage(phone, message, format) {
-        // Hardcoded URL as requested by user
-        const wahaApiUrl = 'http://localhost:3000/api/sendText';
+    // Get the first active (WORKING) session from WAHA
+    async getActiveSession() {
+        try {
+            const response = await fetch('http://localhost:3000/api/sessions');
+            if (response.ok) {
+                const sessions = await response.json();
+                const workingSession = sessions.find(s => s.status === 'WORKING');
+                if (workingSession) {
+                    return workingSession.name;
+                }
+            }
+        } catch (e) {
+            console.error('[Blast] Error fetching active session:', e);
+        }
+        return 'default'; // Fallback
+    }
 
+    async sendMessage(phone, message, format, media = null) {
         // Format phone: Remove all non-digits (Handles +55 18 99823-2124 -> 5518998232124)
         const cleanPhone = phone.replace(/\D/g, '');
         const formattedPhone = cleanPhone + '@c.us';
 
-        console.log(`Sending message to ${formattedPhone} via ${wahaApiUrl}`);
+        // Get active session dynamically
+        const session = await this.getActiveSession();
+
+        let wahaApiUrl = 'http://localhost:3000/api/sendText';
+        let payload = {
+            chatId: formattedPhone,
+            session: session,
+        };
+
+        if (media && media.url) {
+            // Media Layout
+            if (media.type === 'image') {
+                wahaApiUrl = 'http://localhost:3000/api/sendImage';
+                payload.file = {
+                    url: media.url,
+                    mimetype: 'image/jpeg', // Defaulting to jpeg for simplicity or detect from extension
+                    filename: 'image.jpg'
+                };
+                payload.caption = message; // Message becomes caption
+            } else if (media.type === 'video') {
+                wahaApiUrl = 'http://localhost:3000/api/sendVideo';
+                payload.file = {
+                    url: media.url,
+                    mimetype: 'video/mp4',
+                    filename: 'video.mp4'
+                };
+                payload.caption = message;
+            } else if (media.type === 'voice') { // PTT
+                wahaApiUrl = 'http://localhost:3000/api/sendVoice';
+                payload.file = {
+                    url: media.url,
+                    mimetype: 'audio/ogg'
+                };
+                // Voice doesn't support caption usually
+            }
+        } else {
+            // Text Layout
+            payload.text = message;
+        }
+
+        console.log(`Sending ${media ? media.type : 'text'} to ${formattedPhone} via ${wahaApiUrl} (session: ${session})`);
 
         try {
             const response = await fetch(wahaApiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    chatId: formattedPhone,
-                    text: message,
-                    session: 'default'
-                })
+                body: JSON.stringify(payload)
             });
 
             if (!response.ok) {
@@ -300,7 +359,7 @@ class BlastService {
                         .upsert({
                             chat_id: chatData.id,
                             message_id: messageData.id || `blast-${Date.now()}`, // Fallback if no ID
-                            session: 'default',
+                            session: session,
                             from_jid: formattedPhone, // Technically 'to', but for 'from_me=true' it's the chat JID
                             from_me: true,
                             body: message,

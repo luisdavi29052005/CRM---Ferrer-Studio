@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useRef, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MoreVertical, Search, Video, ArrowLeft, Check, CheckCheck, FileText, Lock } from 'lucide-react';
+import { MoreVertical, Search, Video, ArrowLeft, Check, CheckCheck, FileText, Lock, Bot, AlertTriangle, ImagePlus } from 'lucide-react';
 import { WahaChat, WahaMessage } from '../../types/waha';
 import { Lead } from '../../types';
 import { motion } from 'framer-motion';
@@ -18,6 +18,7 @@ interface ChatWindowProps {
     currentUserId?: string;
     onSendMessage: (text: string, file?: File) => Promise<void>;
     onSendMedia: (file: File, type: 'image' | 'video' | 'audio' | 'file') => void;
+    isSending?: boolean;
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -28,7 +29,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
     profilePic,
     presence,
     onSendMessage,
-    onSendMedia
+    onSendMedia,
+    isSending = false
 }) => {
     const { t } = useTranslation();
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -115,6 +117,43 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                 </div>
             </div>
 
+            {/* NEEDS_EDIT Banner */}
+            {activeChat.lead?.status === 'NEEDS_EDIT' && (
+                <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-500/20 rounded-lg text-amber-500 animate-pulse">
+                            <AlertTriangle size={20} />
+                        </div>
+                        <div>
+                            <h4 className="text-amber-500 font-bold text-sm">Atenção Necessária</h4>
+                            <p className="text-amber-500/80 text-xs">A IA pausou este chat aguardando edição de imagem.</p>
+                        </div>
+                    </div>
+                    <div>
+                        <input
+                            type="file"
+                            id="handoff-upload"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    onSendMedia(file, 'image');
+                                    // Optional: We might want to clear the input value so same file can be selected again
+                                    e.target.value = '';
+                                }
+                            }}
+                        />
+                        <button
+                            onClick={() => document.getElementById('handoff-upload')?.click()}
+                            className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-amber-500/20"
+                        >
+                            <ImagePlus size={14} /> Upload Edição
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Messages Area */}
             <div
                 className="flex-1 overflow-y-auto custom-scrollbar px-6 py-6 space-y-4 bg-[#09090b]"
@@ -153,6 +192,12 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                                             : 'bg-zinc-900 text-zinc-300 border border-white/5 rounded-tl-sm'
                                             }`}
                                     >
+                                        {/* AI Badge */}
+                                        {msg.isAiGenerated && (
+                                            <div className="absolute -top-3 left-4 bg-violet-500/20 text-violet-300 border border-violet-500/30 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider flex items-center gap-1 backdrop-blur-md shadow-sm">
+                                                <Bot size={10} /> {msg.agentName || 'AI'}
+                                            </div>
+                                        )}
                                         {/* Content */}
                                         <div className="whitespace-pre-wrap break-words">
                                             {msg.mediaUrl && (
@@ -204,7 +249,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
             </div>
 
             {/* Input Area */}
-            <ChatInput onSendMessage={onSendMessage} onSendMedia={onSendMedia} isSending={false} />
+            <ChatInput onSendMessage={onSendMessage} onSendMedia={onSendMedia} isSending={isSending} />
         </div>
     );
 };

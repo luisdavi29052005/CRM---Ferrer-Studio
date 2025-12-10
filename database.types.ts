@@ -403,6 +403,8 @@ export type Database = {
                     raw: Json | null
                     session: string | null
                     type: string | null
+                    is_ai_generated?: boolean | null
+                    agent_name?: string | null
                 }
                 Insert: {
                     ack?: number | null
@@ -421,6 +423,8 @@ export type Database = {
                     raw?: Json | null
                     session?: string | null
                     type?: string | null
+                    is_ai_generated?: boolean | null
+                    agent_name?: string | null
                 }
                 Update: {
                     ack?: number | null
@@ -439,6 +443,8 @@ export type Database = {
                     raw?: Json | null
                     session?: string | null
                     type?: string | null
+                    is_ai_generated?: boolean | null
+                    agent_name?: string | null
                 }
                 Relationships: [
                     {

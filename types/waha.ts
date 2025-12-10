@@ -65,6 +65,7 @@ export interface WahaMessage {
     mediaType?: 'image' | 'video' | 'audio' | 'file';
     caption?: string;
     isAiGenerated?: boolean;
+    agentName?: string;
 }
 
 // Payloads for sending

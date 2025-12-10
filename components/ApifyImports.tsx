@@ -1,13 +1,13 @@
 // @ts-nocheck
 import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Filter, RefreshCw, Trash2, Upload, Download, Plus, X, Check, AlertCircle, FileText, Loader, FileDown as FileDownIcon, Clock as ClockIcon, CheckCircle as CheckCircleIcon, MessageSquare, Terminal, UserX, Send, XCircle } from 'lucide-react';
+import { Search, Filter, RefreshCw, Trash2, Upload, Download, Plus, X, Check, AlertCircle, FileText, Loader, FileDown as FileDownIcon, Clock as ClockIcon, CheckCircle as CheckCircleIcon, MessageSquare, Terminal, UserX, Send, XCircle, AlertTriangle } from 'lucide-react';
 import Papa from 'papaparse';
 import { supabase } from '../supabaseClient';
 import { Lead, Source, Stage } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HighlightText } from './HighlightText';
-import { fetchContactProfilePic, checkNumberExists, deleteApifyLeads } from '../services/supabaseService';
+import { fetchContactProfilePic, checkNumberExists, deleteApifyLeads, fetchSessions, updateApifyLeadStatus } from '../services/supabaseService';
 import { AlertModal } from './AlertModal';
 
 export type ApifyLead = {
@@ -19,7 +19,7 @@ export type ApifyLead = {
   city: string | null;
   state: string | null;
   source: string;
-  status: 'sent' | 'not sent' | 'error' | 'lost';
+  status: 'sent' | 'not sent' | 'error' | 'lost' | 'NEEDS_EDIT';
   created_at: string;
 };
 
@@ -27,9 +27,10 @@ type Props = {
   items: ApifyLead[];
   onImport?: () => void | Promise<void>;
   onOpenChat?: (lead: Lead) => void;
+  onUpdateStatus?: (id: number, status: string) => void; // Optional callback if parent manages state
 };
 
-export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
+export const ApifyImports = ({ items, onImport, onOpenChat, onUpdateStatus }: Props) => {
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
@@ -46,7 +47,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
   const [scrapeConfig, setScrapeConfig] = useState({
     searchTerms: [] as string[],
     location: '',
-    maxResults: 50,
+    maxResults: 200,
     language: 'en',
     skipClosedPlaces: false,
     scrapeContacts: false,
@@ -58,6 +59,19 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
   const [logs, setLogs] = useState<{ timestamp: string; type: 'info' | 'error' | 'success' | 'warning'; message: string }[]>([]);
   const [scrapeStatus, setScrapeStatus] = useState<'idle' | 'running' | 'completed' | 'error'>('idle');
   const logsEndRef = useRef<HTMLDivElement>(null);
+
+  // Sessions State
+  const [sessions, setSessions] = useState<{ name: string, status: string }[]>([]);
+  const [selectedSession, setSelectedSession] = useState<string>('');
+
+  useEffect(() => {
+    fetchSessions().then(s => {
+      setSessions(s);
+      const working = s.find(x => x.status === 'WORKING');
+      if (working) setSelectedSession(working.name);
+      else if (s.length > 0) setSelectedSession(s[0].name);
+    });
+  }, []);
 
   // Scroll to bottom of logs
   useEffect(() => {
@@ -82,6 +96,10 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
     dateStart: '',
     dateEnd: ''
   });
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
 
   // Fetch profile pictures for items with phone numbers (Lazy Load)
   useEffect(() => {
@@ -127,6 +145,26 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
     }
   }, [items.length]); // Only re-run if item count changes significantly
 
+  // Realtime subscription for Apify status updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('public:apify_status_changes')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'apify' },
+        (payload) => {
+          // We can't update 'items' prop directly since it comes from parent
+          // But we can trigger a refresh via onImport callback which re-fetches everything
+          if (onImport) onImport();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const filteredItems = items.filter(item => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (item.category && item.category.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -151,6 +189,17 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
   });
 
   const activeFiltersCount = Object.values(filters).filter(v => v !== 'all' && v !== '').length;
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedItems = filteredItems.slice(startIndex, endIndex);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filters]);
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -372,7 +421,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
           setImportProgress(Math.round(((i + 1) / leadsWithPhone.length) * 100));
 
           // Check existence
-          const exists = await checkNumberExists(lead.phone);
+          const exists = await checkNumberExists(lead.phone, selectedSession);
 
           if (exists) {
             // Insert immediately
@@ -527,6 +576,16 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
     }
   };
 
+  const handleStatusChange = async (id: number, newStatus: string) => {
+    try {
+      await updateApifyLeadStatus(id.toString(), newStatus);
+      if (onImport) await onImport(); // Refresh list to reflect changes
+    } catch (e) {
+      console.error("Error updating status:", e);
+      setAlertModal({ isOpen: true, title: 'Erro', message: 'Falha ao atualizar status.', type: 'error' });
+    }
+  };
+
   return (
     <div className="p-8 h-full flex flex-col overflow-hidden relative">
       <div className="flex items-end justify-between mb-8 pb-6 border-b border-white/5">
@@ -611,6 +670,7 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                           <option value="all">Todos os Status</option>
                           <option value="sent">Enviado</option>
                           <option value="not sent">Não Enviado</option>
+                          <option value="NEEDS_EDIT">Aguardando Edição</option>
                           <option value="error">Erro</option>
                           <option value="lost">Perdido</option>
                         </select>
@@ -739,6 +799,27 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
               <span>Nova Busca</span>
             </button>
 
+            {/* Session Selector */}
+            {sessions.length > 0 && (
+              <div className="relative group ml-2">
+                <select
+                  value={selectedSession}
+                  onChange={(e) => setSelectedSession(e.target.value)}
+                  className="bg-zinc-900 border border-zinc-800 text-zinc-300 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-bronze-500 transition-colors appearance-none pr-8 font-medium"
+                  title="Session to use for validation"
+                >
+                  {sessions.map(s => (
+                    <option key={s.name} value={s.name}>
+                      {s.name} ({s.status})
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
+                  <Terminal size={12} />
+                </div>
+              </div>
+            )}
+
 
           </div>
         </div>
@@ -774,8 +855,8 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {filteredItems.length > 0 ? (
-                filteredItems.map((item) => (
+              {paginatedItems.length > 0 ? (
+                paginatedItems.map((item) => (
                   <tr key={item.id} className="group hover:bg-white/[0.02] transition-colors">
                     <td className="py-4 px-4">
                       <div className="flex items-center justify-center">
@@ -829,25 +910,41 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                       </div>
                     </td>
                     <td className="py-4 px-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide border uppercase ${item.status === 'sent'
-                        ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                        : item.status === 'lost'
-                          ? 'bg-orange-500/10 text-orange-500 border-orange-500/20'
-                          : item.status === 'error'
-                            ? 'bg-red-500/10 text-red-500 border-red-500/20'
-                            : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                        }`}>
-                        {item.status === 'sent' ? (
-                          <Send size={12} className="mr-1.5" />
-                        ) : item.status === 'lost' ? (
-                          <UserX size={12} className="mr-1.5" />
-                        ) : item.status === 'error' ? (
-                          <XCircle size={12} className="mr-1.5" />
-                        ) : (
-                          <ClockIcon size={12} className="mr-1.5" />
-                        )}
-                        {item.status === 'sent' ? 'Enviado' : item.status === 'lost' ? 'Perdido' : item.status === 'not sent' ? 'Não Enviado' : item.status}
-                      </span>
+                      <div className="relative inline-block">
+                        <select
+                          value={String(item.status)}
+                          onChange={(e) => handleStatusChange(item.id, e.target.value)}
+                          className={`appearance-none pl-8 pr-8 py-1 rounded-full text-[11px] font-semibold tracking-wide border uppercase cursor-pointer focus:outline-none focus:ring-1 focus:ring-offset-1 focus:ring-offset-black ${item.status === 'sent' || item.status === 'true'
+                            ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 focus:ring-emerald-500'
+                            : item.status === 'lost'
+                              ? 'bg-orange-500/10 text-orange-500 border-orange-500/20 focus:ring-orange-500'
+                              : item.status === 'NEEDS_EDIT'
+                                ? 'bg-amber-500/10 text-amber-500 border-amber-500/20 focus:ring-amber-500'
+                                : item.status === 'error'
+                                  ? 'bg-red-500/10 text-red-500 border-red-500/20 focus:ring-red-500'
+                                  : 'bg-zinc-800 text-zinc-400 border-zinc-700 focus:ring-zinc-600'
+                            }`}
+                        >
+                          <option value="not sent">Não Enviado</option>
+                          <option value="sent">Enviado</option>
+                          <option value="NEEDS_EDIT">Aguardando Edição</option>
+                          <option value="lost">Perdido</option>
+                          <option value="error">Erro</option>
+                        </select>
+                        <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                          {item.status === 'sent' || item.status === 'true' ? (
+                            <Send size={12} className="text-emerald-500" />
+                          ) : item.status === 'lost' ? (
+                            <UserX size={12} className="text-orange-500" />
+                          ) : item.status === 'NEEDS_EDIT' ? (
+                            <AlertTriangle size={12} className="text-amber-500" />
+                          ) : item.status === 'error' ? (
+                            <XCircle size={12} className="text-red-500" />
+                          ) : (
+                            <ClockIcon size={12} className="text-zinc-400" />
+                          )}
+                        </div>
+                      </div>
                     </td>
                     <td className="py-4 px-4 text-right">
                       <button
@@ -870,6 +967,95 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {filteredItems.length > 0 && (
+          <div className="flex items-center justify-between py-4 px-2 border-t border-white/5 mt-2">
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-zinc-500">
+                Mostrando {startIndex + 1}-{Math.min(endIndex, filteredItems.length)} de {filteredItems.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500">Por página:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-zinc-900 border border-white/10 text-zinc-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-bronze-500/50"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="px-2 py-1 text-xs bg-zinc-900 border border-white/10 text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                ««
+              </button>
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-xs bg-zinc-900 border border-white/10 text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Anterior
+              </button>
+
+              <div className="flex items-center gap-1 mx-2">
+                {/* Page numbers */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-7 h-7 text-xs rounded transition-colors ${currentPage === pageNum
+                        ? 'bg-bronze-500 text-black font-bold'
+                        : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                        }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 text-xs bg-zinc-900 border border-white/10 text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Próxima
+              </button>
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="px-2 py-1 text-xs bg-zinc-900 border border-white/10 text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                »»
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       <AlertModal
         isOpen={alertModal.isOpen}
@@ -964,9 +1150,9 @@ export const ApifyImports = ({ items, onImport, onOpenChat }: Props) => {
                     <input
                       type="number"
                       value={scrapeConfig.maxResults}
-                      onChange={(e) => setScrapeConfig({ ...scrapeConfig, maxResults: parseInt(e.target.value) || 50 })}
+                      onChange={(e) => setScrapeConfig({ ...scrapeConfig, maxResults: parseInt(e.target.value) || 200 })}
                       min={1}
-                      max={500}
+                      max={2000}
                       className="w-full bg-transparent border-b border-zinc-800 text-zinc-200 py-1.5 focus:outline-none focus:border-bronze-500 transition-colors placeholder:text-zinc-700 text-sm"
                     />
                   </div>

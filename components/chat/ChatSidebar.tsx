@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Filter, MessageSquare, Users, MoreVertical, Plus } from 'lucide-react';
+import { Search, Filter, MessageSquare, Users, MoreVertical, Plus, AlertTriangle } from 'lucide-react';
 import { Lead } from '../../types';
 import { WahaChat, WahaMe } from '../../types/waha';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
@@ -145,9 +145,16 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                                 {/* Content */}
                                 <div className="flex-1 min-w-0">
                                     <div className="flex justify-between items-center mb-1">
-                                        <h3 className={`text-sm font-semibold truncate ${selectedChatId === chat.id ? 'text-zinc-100' : 'text-zinc-300 group-hover:text-zinc-100'}`}>
-                                            <HighlightText text={chat.lead?.name || chat.push_name || chat.id} highlight={searchTerm} />
-                                        </h3>
+                                        <div className="flex items-center gap-2 overflow-hidden">
+                                            <h3 className={`text-sm font-semibold truncate ${selectedChatId === chat.id ? 'text-zinc-100' : 'text-zinc-300 group-hover:text-zinc-100'}`}>
+                                                <HighlightText text={chat.lead?.name || chat.push_name || chat.id} highlight={searchTerm} />
+                                            </h3>
+                                            {chat.lead?.status === 'NEEDS_EDIT' && (
+                                                <div className="shrink-0 p-0.5 bg-amber-500/20 text-amber-500 rounded animate-pulse" title="Aguardando Edição">
+                                                    <AlertTriangle size={10} />
+                                                </div>
+                                            )}
+                                        </div>
                                         {chat.timestamp && (
                                             <span className="text-[10px] text-zinc-600 font-medium group-hover:text-zinc-500">
                                                 {formatTime(chat.timestamp)}
@@ -168,8 +175,9 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                             </div>
                         ))}
                     </div>
-                )}
-            </div>
-        </div>
+                )
+                }
+            </div >
+        </div >
     );
 };

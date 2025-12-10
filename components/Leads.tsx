@@ -77,6 +77,10 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, onRefresh, isAd
     dateEnd: ''
   });
 
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+
   // Fetch profile pictures for leads with phone numbers
   useEffect(() => {
     const fetchProfilePics = async () => {
@@ -135,6 +139,17 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, onRefresh, isAd
   });
 
   const activeFiltersCount = Object.values(filters).filter(v => v !== 'all' && v !== '').length;
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredLeads.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedLeads = filteredLeads.slice(startIndex, endIndex);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filters]);
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -369,122 +384,213 @@ export const Leads: React.FC<LeadsProps> = ({ leads, onOpenChat, onRefresh, isAd
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto custom-scrollbar -mx-8 px-8">
-        <table className="w-full text-left border-collapse">
-          <thead className="sticky top-0 z-10 bg-black/80 backdrop-blur-sm">
-            <tr>
-              <th className="py-3 px-4 border-b border-white/5 w-10">
-                <div className="flex items-center justify-center">
-                  <input
-                    type="checkbox"
-                    checked={filteredLeads.length > 0 && selectedItems.size === filteredLeads.length}
-                    onChange={handleSelectAll}
-                    className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-zinc-100 focus:ring-0 focus:ring-offset-0 cursor-pointer"
-                  />
-                </div>
-              </th>
-              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.name')}</th>
-              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">Localização</th>
-              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">Categoria</th>
-              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.status')}</th>
-              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.temp')}</th>
-              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.value')}</th>
-              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.last_contact')}</th>
-              <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 text-right">{t('common.actions')}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5">
-            {filteredLeads.length > 0 ? (
-              filteredLeads.map((lead) => (
-                <tr key={lead.id} className="group hover:bg-white/[0.02] transition-colors">
-                  <td className="py-4 px-4">
-                    <div className="flex items-center justify-center">
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.has(lead.id)}
-                        onChange={() => handleSelectItem(lead.id)}
-                        className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-zinc-100 focus:ring-0 focus:ring-offset-0 cursor-pointer opacity-50 group-hover:opacity-100 transition-opacity"
-                      />
-                    </div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="flex items-center gap-4">
-                      {profilePics[lead.phone] ? (
-                        <img
-                          src={profilePics[lead.phone]!}
-                          alt={lead.name}
-                          className="w-8 h-8 rounded-full object-cover border border-white/10"
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 overflow-auto custom-scrollbar -mx-8 px-8">
+          <table className="w-full text-left border-collapse">
+            <thead className="sticky top-0 z-10 bg-black/80 backdrop-blur-sm">
+              <tr>
+                <th className="py-3 px-4 border-b border-white/5 w-10">
+                  <div className="flex items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={filteredLeads.length > 0 && selectedItems.size === filteredLeads.length}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-zinc-100 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                    />
+                  </div>
+                </th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.name')}</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">Localização</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">Categoria</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.status')}</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.temp')}</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.value')}</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5">{t('leads.table.last_contact')}</th>
+                <th className="py-3 px-4 text-[10px] font-bold text-zinc-600 uppercase tracking-widest border-b border-white/5 text-right">{t('common.actions')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {paginatedLeads.length > 0 ? (
+                paginatedLeads.map((lead) => (
+                  <tr key={lead.id} className="group hover:bg-white/[0.02] transition-colors">
+                    <td className="py-4 px-4">
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedItems.has(lead.id)}
+                          onChange={() => handleSelectItem(lead.id)}
+                          className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-zinc-100 focus:ring-0 focus:ring-offset-0 cursor-pointer opacity-50 group-hover:opacity-100 transition-opacity"
                         />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-xs font-bold text-zinc-500 border border-white/5 group-hover:border-bronze-500/30 group-hover:text-bronze-500 transition-colors">
-                          {lead.name.charAt(0)}
-                        </div>
-                      )}
-                      <div>
-                        <div className="font-semibold text-zinc-200 text-sm group-hover:text-white transition-colors">
-                          <HighlightText text={lead.name} highlight={searchTerm} />
-                        </div>
-                        <div className="text-xs text-zinc-500">
-                          <HighlightText text={lead.business} highlight={searchTerm} />
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-4">
+                        {profilePics[lead.phone] ? (
+                          <img
+                            src={profilePics[lead.phone]!}
+                            alt={lead.name}
+                            className="w-8 h-8 rounded-full object-cover border border-white/10"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-zinc-900 flex items-center justify-center text-xs font-bold text-zinc-500 border border-white/5 group-hover:border-bronze-500/30 group-hover:text-bronze-500 transition-colors">
+                            {lead.name.charAt(0)}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-semibold text-zinc-200 text-sm group-hover:text-white transition-colors">
+                            <HighlightText text={lead.name} highlight={searchTerm} />
+                          </div>
+                          <div className="text-xs text-zinc-500">
+                            <HighlightText text={lead.business} highlight={searchTerm} />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-4 text-sm text-zinc-400">
-                    <div className="flex flex-col">
-                      <HighlightText text={lead.city || ''} highlight={filters.city || searchTerm} />
-                      <span className="text-xs text-zinc-600">
-                        <HighlightText text={lead.state || ''} highlight={filters.state} />
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-4 text-sm text-zinc-400">
-                    <HighlightText text={lead.category || ''} highlight={filters.category} />
-                  </td>
-                  <td className="py-4 px-4">
-                    <StageBadge stage={lead.stage} />
-                  </td>
-                  <td className="py-4 px-4">
-                    <TemperatureBadge temp={lead.temperature} />
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="flex items-center gap-1 text-zinc-300 text-sm font-medium font-mono">
-                      <DollarSign size={12} className="text-zinc-500" />
-                      {lead.budget.toLocaleString()}
-                    </div>
-                  </td>
-                  <td className="py-4 px-4">
-                    <div className="flex items-center gap-2 text-zinc-500 text-xs">
-                      <Calendar size={12} />
-                      {lead.last_interaction}
-                    </div>
-                  </td>
-                  <td className="py-4 px-4 text-right">
-                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => onOpenChat(lead)}
-                        className="p-2 hover:bg-white/5 rounded-lg text-zinc-500 hover:text-bronze-400 transition-colors"
-                      >
-                        <MessageCircle size={16} />
-                      </button>
-                      {isAdmin && (
-                        <button className="p-2 hover:bg-white/5 rounded-lg text-zinc-500 hover:text-zinc-300 transition-colors">
-                          <MoreHorizontal size={16} />
+                    </td>
+                    <td className="py-4 px-4 text-sm text-zinc-400">
+                      <div className="flex flex-col">
+                        <HighlightText text={lead.city || ''} highlight={filters.city || searchTerm} />
+                        <span className="text-xs text-zinc-600">
+                          <HighlightText text={lead.state || ''} highlight={filters.state} />
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-4 px-4 text-sm text-zinc-400">
+                      <HighlightText text={lead.category || ''} highlight={filters.category} />
+                    </td>
+                    <td className="py-4 px-4">
+                      <StageBadge stage={lead.stage} />
+                    </td>
+                    <td className="py-4 px-4">
+                      <TemperatureBadge temp={lead.temperature} />
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-1 text-zinc-300 text-sm font-medium font-mono">
+                        <DollarSign size={12} className="text-zinc-500" />
+                        {lead.budget.toLocaleString()}
+                      </div>
+                    </td>
+                    <td className="py-4 px-4">
+                      <div className="flex items-center gap-2 text-zinc-500 text-xs">
+                        <Calendar size={12} />
+                        {lead.last_interaction}
+                      </div>
+                    </td>
+                    <td className="py-4 px-4 text-right">
+                      <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => onOpenChat(lead)}
+                          className="p-2 hover:bg-white/5 rounded-lg text-zinc-500 hover:text-bronze-400 transition-colors"
+                        >
+                          <MessageCircle size={16} />
                         </button>
-                      )}
-                    </div>
+                        {isAdmin && (
+                          <button className="p-2 hover:bg-white/5 rounded-lg text-zinc-500 hover:text-zinc-300 transition-colors">
+                            <MoreHorizontal size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={9} className="p-8 text-center text-zinc-500 text-sm">
+                    Nenhum lead encontrado com os filtros selecionados.
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={9} className="p-8 text-center text-zinc-500 text-sm">
-                  Nenhum lead encontrado com os filtros selecionados.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Controls */}
+        {filteredLeads.length > 0 && (
+          <div className="flex items-center justify-between py-4 px-2 border-t border-white/5 mt-2">
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-zinc-500">
+                Mostrando {startIndex + 1}-{Math.min(endIndex, filteredLeads.length)} de {filteredLeads.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-zinc-500">Por página:</span>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="bg-zinc-900 border border-white/10 text-zinc-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-bronze-500/50"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(1)}
+                disabled={currentPage === 1}
+                className="px-2 py-1 text-xs bg-zinc-900 border border-white/10 text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                ««
+              </button>
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-xs bg-zinc-900 border border-white/10 text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Anterior
+              </button>
+
+              <div className="flex items-center gap-1 mx-2">
+                {/* Page numbers */}
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-7 h-7 text-xs rounded transition-colors ${currentPage === pageNum
+                          ? 'bg-bronze-500 text-black font-bold'
+                          : 'bg-zinc-900 border border-white/10 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200'
+                        }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 text-xs bg-zinc-900 border border-white/10 text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Próxima
+              </button>
+              <button
+                onClick={() => setCurrentPage(totalPages)}
+                disabled={currentPage === totalPages}
+                className="px-2 py-1 text-xs bg-zinc-900 border border-white/10 text-zinc-400 rounded hover:bg-zinc-800 hover:text-zinc-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                »»
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -17,7 +17,7 @@ import { SystemSettings } from './components/SystemSettings';
 import { ApifyBlastPage } from './components/ApifyBlastPage';
 
 import { Lead, ApifyLead, WahaChat, AutomationFlow, ActivityItem } from './types';
-import { fetchLeads, fetchApifyLeads, fetchWahaChats, fetchAutomations, authActions, fetchChartData, checkWahaStatus, updateProfile, fetchRecentActivity, fetchContactProfilePic, updateLead } from './services/supabaseService';
+import { fetchLeads, fetchApifyLeads, fetchAllApifyLeads, fetchWahaChats, fetchAutomations, authActions, fetchChartData, checkWahaStatus, updateProfile, fetchRecentActivity, fetchContactProfilePic, updateLead } from './services/supabaseService';
 import { wahaService } from './services/wahaService';
 import { supabase } from './supabaseClient';
 import { GridBackground } from './components/GridBackground';
@@ -372,14 +372,13 @@ const App = () => {
       const loadData = async () => {
         setIsLoadingData(true);
         try {
-          const [fetchedLeads, fetchedApify, fetchedChats, fetchedAutos, fetchedChart, fetchedActivity, wahaLiveChats] = await Promise.all([
+          const [fetchedLeads, fetchedApify, fetchedChats, fetchedAutos, fetchedChart, fetchedActivity] = await Promise.all([
             fetchLeads(),
-            fetchApifyLeads(0), // Fetch first page only
+            fetchAllApifyLeads(), // Fetch ALL leads for frontend pagination
             fetchWahaChats(),
             fetchAutomations(),
             fetchChartData(),
-            fetchRecentActivity(),
-            wahaService.getChats('default').catch(() => [])
+            fetchRecentActivity()
           ]);
 
           // --- Chat Merging Logic (Moved from Chat.tsx) ---
@@ -402,18 +401,25 @@ const App = () => {
 
           const chatMap = new Map<string, WahaChat>();
           mappedSupabaseChats.forEach(c => chatMap.set(c.id, c));
-          (wahaLiveChats || []).forEach((c: any) => chatMap.set(c.id, { ...chatMap.get(c.id), ...c }));
+          // Note: wahaLiveChats removed - Chat.tsx manages live chats internally based on selected session
 
           const mergedChats = Array.from(chatMap.values());
 
           // Enrich with Lead data
+          const usedLeads = new Set<string>();
           const enrichedChats = mergedChats.map(chat => {
-            const lead = (fetchedLeads || []).find(l => l.chat_id === chat.id || l.phone === chat.id.replace('@c.us', ''));
+            const lead = (fetchedLeads || []).find(l => {
+              const matched = l.chat_id === chat.id || l.phone === chat.id.replace('@c.us', '');
+              if (matched) usedLeads.add(l.id);
+              return matched;
+            });
             return { ...chat, lead };
           });
 
           // Add Virtual Chats
           (fetchedLeads || []).forEach(lead => {
+            if (usedLeads.has(lead.id)) return; // Skip if lead already attached to a real chat
+
             const chatId = lead.chat_id || `${lead.phone}@c.us`;
             if (!chatMap.has(chatId)) {
               const alreadyExists = enrichedChats.some(c => c.id === chatId);
@@ -664,7 +670,7 @@ const App = () => {
                     exit={{ opacity: 0, y: -10, scale: 0.99 }}
                     className="h-full"
                   >
-                    <Dashboard leads={leads} chartData={chartData} activity={activity} isLoading={isLoadingData} />
+                    <Dashboard leads={leads} chartData={chartData} activity={activity} isLoading={isLoadingData} apifyLeads={apifyLeads} wahaStatus={wahaStatus} />
                   </motion.div>
                 } />
                 <Route path="/leads" element={
@@ -716,15 +722,10 @@ const App = () => {
                       items={apifyLeads}
                       onOpenChat={handleOpenChat}
                       onImport={async () => {
-                        // Refresh logic - reset to first page
-                        const fresh = await fetchApifyLeads(0);
+                        // Refresh logic - fetch all leads
+                        const fresh = await fetchAllApifyLeads();
                         setApifyLeads(fresh);
-                        setApifyPage(0);
-                        setApifyHasMore(fresh.length === 50);
                       }}
-                      onLoadMore={loadMoreApifyLeads}
-                      hasMore={apifyHasMore}
-                      loadingMore={apifyLoadingMore}
                     />
                   </motion.div>
                 } />

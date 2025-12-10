@@ -7,13 +7,72 @@ class AIHandler {
         this.supabase = supabase;
     }
 
-    async processMessage(chatId, messageBody, senderName) {
+    // Get the first active (WORKING) session from WAHA
+    async getActiveSession() {
+        try {
+            const response = await fetch('http://localhost:3000/api/sessions');
+            if (response.ok) {
+                const sessions = await response.json();
+                const workingSession = sessions.find(s => s.status === 'WORKING');
+                if (workingSession) {
+                    return workingSession.name;
+                }
+            }
+        } catch (e) {
+            console.error('[AI Handler] Error fetching active session:', e);
+        }
+        return 'default'; // Fallback
+    }
+
+    // Helper to download media (image/audio) and convert to base64 for Gemini
+    async downloadMediaAsBase64(mediaUrl) {
+        try {
+            const response = await fetch(mediaUrl);
+            if (!response.ok) return null;
+
+            const buffer = await response.arrayBuffer();
+            const base64 = Buffer.from(buffer).toString('base64');
+            return base64;
+        } catch (err) {
+            console.error('[AI Handler] Error downloading media:', err);
+            return null;
+        }
+    }
+
+    async generateContentWithRetry(model, contentParts, retries = 3) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                return await model.generateContent(contentParts);
+            } catch (error) {
+                if (error.status === 429 || (error.message && error.message.includes('429'))) {
+                    console.warn(`[AI Handler] Rate limit exceeded. Attempt ${i + 1}/${retries}`);
+
+                    // Default backoff: 2s, 4s, 8s...
+                    let waitTime = 2000 * Math.pow(2, i);
+
+                    // Try to parse info from error message if available
+                    // Error often says "Please retry in 19.488s"
+                    const match = error.message?.match(/retry in ([\d\.]+)s/);
+                    if (match && match[1]) {
+                        waitTime = Math.ceil(parseFloat(match[1]) * 1000) + 1000; // Add 1s buffer
+                    }
+
+                    console.log(`[AI Handler] Waiting ${waitTime}ms before retry...`);
+                    await new Promise(resolve => setTimeout(resolve, waitTime));
+                } else {
+                    throw error; // Not a rate limit error, rethrow
+                }
+            }
+        }
+        throw new Error(`Max retries (${retries}) exceeded for Gemini API`);
+    }
+
+    async processMessage(chatId, messageBody, senderName, mediaInfo = null) {
         try {
             // 1. Find the contact in Apify table to get Category
             const cleanPhone = chatId.replace(/\D/g, '');
             const { data: contact } = await this.supabase
                 .from('apify')
-
                 .select('category, title, city, state')
                 .eq('phone', cleanPhone)
                 .maybeSingle();
@@ -27,10 +86,6 @@ class AIHandler {
             console.log(`[AI Handler] Processing message from ${cleanPhone}. Category: "${category}"`);
 
             // 2. Find the Agent for this Category
-            // We search for an agent that matches the category. 
-            // If the category is specific (e.g. "Lanchonete"), we look for an agent with that category.
-            // If no specific agent is found, we could look for a 'Geral' agent or similar.
-
             let { data: agent } = await this.supabase
                 .from('agents')
                 .select('*')
@@ -55,7 +110,9 @@ class AIHandler {
                 return;
             }
 
-            console.log(`[AI Handler] Selected Agent: ${agent.name} (${agent.model})`);
+            // Determine session to use - agent.session or fallback to first active
+            const sessionToUse = agent.session || await this.getActiveSession();
+            console.log(`[AI Handler] Selected Agent: ${agent.name} (${agent.model}) - Session: ${sessionToUse}`);
 
             // 3. Fetch System Settings for API Key
             const { data: settings } = await this.supabase
@@ -76,29 +133,21 @@ class AIHandler {
             // Fetch recent conversation history for context
             const { data: history } = await this.supabase
                 .from('whatsapp_waha_messages')
-                .select('body, from_me')
+                .select('body, from_me, has_media, media_url, media_mimetype')
                 .eq('chat_id', (await this.getChatId(chatId)))
                 .order('message_timestamp', { ascending: false })
                 .limit(10);
 
-            const conversationHistory = history ? history.reverse().map(m => `${m.from_me ? 'Agent' : 'User'}: ${m.body}`).join('\n') : '';
-
-            const prompt = `
+            // Build content parts for Gemini (supports multimodal history)
+            const systemPrompt = `
                 ${agent.prompt}
 
-                CONTEXT:
                 CONTEXT:
                 User Business/Title: ${businessName}
                 User Display Name: ${senderDisplayName}
                 User Category: ${category}
                 City: ${leadCity}
                 State: ${leadState}
-                
-                CONVERSATION HISTORY:
-                ${conversationHistory}
-
-                INCOMING MESSAGE:
-                "${messageBody}"
 
                 INSTRUCTIONS:
                 1. Analyze the conversation to determine the user's intent and status.
@@ -109,11 +158,16 @@ class AIHandler {
                 6. **IMPORTANT:** If you want to send multiple separate messages (e.g., a greeting first, then the question, or to create suspense), separate them with the tag '${SPLIT}'. 
                    Example: "Oi Davi! ${SPLIT} Tudo bem? ${SPLIT} Vi que você tem interesse..."
                    This makes the conversation feel more human.
+                7. **REALITY CHECK:** You CANNOT send images or files. Do NOT claim to have sent an image or edited file unless you clearly see 'Agent [Sent an Image]' in the CONVERSATION HISTORY. If you haven't sent it, just say you can do it or ask if they want it. Do NOT lie about past actions.
+                8. **QUALITY TEST / CHALLENGE:** If the user sends an **IMAGE** (picture/photo) specifically for you to "edit" or "improve" (The 'Quality Test' or 'Isca' phase), your intent MUST be 'handoff'.
+                    - **CRITICAL:** This applies ONLY to IMAGES (photos, pictures). If the user sends AUDIO/VOICE NOTES, analyze the audio content but DO NOT TRIGGER HANDOFF unless they explicitly ask to edit an *image* attached previously.
+                    - In 'response', say something like: "Recebi aqui! Vou passar na minha IA, me dá 5 minutos." (Do not promise immediate delivery, buy time).
+                    - This stops the AI and alerts the human team.
 
                 OUTPUT FORMAT:
                 Return ONLY a JSON object with this structure:
                 {
-                    "intent": "won" | "lost" | "negotiation" | "info" | "neutral",
+                    "intent": "won" | "lost" | "negotiation" | "info" | "neutral" | "handoff",
                     "value": number (optional, estimated deal value),
                     "name": "string (extracted real name of the person, if mentioned. If not mentioned, leave null)",
                     "response": "string (the natural text response to send. Use [SPLIT] to separate messages)",
@@ -121,7 +175,72 @@ class AIHandler {
                 }
             `;
 
-            const result = await model.generateContent(prompt);
+            let contentParts = [{ text: systemPrompt + "\nCONVERSATION HISTORY:\n" }];
+
+            if (history) {
+                // Process history to include images (Multimodal Memory)
+                const reversedHistory = history.reverse();
+                for (const m of reversedHistory) {
+                    const role = m.from_me ? 'Agent' : 'User';
+
+                    // Image OR Audio handling in history
+                    if (m.has_media && m.media_url) {
+                        const isImage = m.media_mimetype?.startsWith('image');
+                        const isAudio = m.media_mimetype?.startsWith('audio');
+                        const roleLabel = m.from_me ? 'Agent' : 'User';
+
+                        if (isImage || isAudio) {
+                            // Try to download historical media
+                            const base64 = await this.downloadMediaAsBase64(m.media_url);
+                            if (base64) {
+                                contentParts.push({ text: `\n${roleLabel} [Sent ${isImage ? 'an Image' : 'Audio'}]:` });
+                                contentParts.push({
+                                    inlineData: {
+                                        mimeType: m.media_mimetype,
+                                        data: base64
+                                    }
+                                });
+                                if (m.body) contentParts.push({ text: `Caption: "${m.body}"` });
+                            } else {
+                                contentParts.push({ text: `\n${roleLabel}: [${isImage ? 'Image' : 'Audio'} URL: ${m.media_url} (Could not download)] ${m.body ? '- ' + m.body : ''}` });
+                            }
+                        }
+                    } else {
+                        contentParts.push({ text: `\n${role}: ${m.body || '[no text]'}` });
+                    }
+                }
+            }
+
+            // Incoming Message
+            contentParts.push({ text: `\nINCOMING MESSAGE:\n"${messageBody}"` });
+
+            // If there's media (Image OR Audio) in the current message
+            if (mediaInfo && mediaInfo.url && (mediaInfo.mimetype?.startsWith('image') || mediaInfo.mimetype?.startsWith('audio'))) {
+                const isImage = mediaInfo.mimetype?.startsWith('image');
+                const isAudio = mediaInfo.mimetype?.startsWith('audio');
+
+                console.log(`[AI Handler] Downloading CURRENT media (${mediaInfo.mimetype}) for analysis...`);
+                const mediaBase64 = await this.downloadMediaAsBase64(mediaInfo.url);
+
+                if (mediaBase64) {
+                    console.log('[AI Handler] Current Media loaded, using Gemini Multimodal');
+                    // Explicitly label the input type for the model
+                    if (isAudio) {
+                        contentParts.push({ text: `\nINCOMING MESSAGE (AUDIO/VOICE NOTE): [The user sent a voice note. Analyze the audio content below]` });
+                    } else if (isImage) {
+                        contentParts.push({ text: `\nINCOMING MESSAGE (IMAGE): [The user sent an image. Analyze the visual content below]` });
+                    }
+
+                    contentParts.push({
+                        inlineData: {
+                            mimeType: mediaInfo.mimetype,
+                            data: mediaBase64
+                        }
+                    });
+                }
+            }
+
+            const result = await this.generateContentWithRetry(model, contentParts);
             const text = result.response.text().trim();
 
             // Clean up code blocks if present
@@ -139,26 +258,36 @@ class AIHandler {
             console.log(`[AI Handler] Analysis: Intent=${aiOutput.intent}, Value=${aiOutput.value}`);
             console.log(`[AI Handler] Generated response: "${aiOutput.response}"`);
 
+            // Special Handle for Handoff (Human-in-the-Loop)
+            if (aiOutput.intent === 'handoff') {
+                console.error(`\n🚨 [HUMAN ALERT] HANDOFF REQUESTED for ${chatId} 🚨`);
+                console.error(`Reason: ${aiOutput.reasoning}`);
+                console.error(`Action Required: Edit the user's image and send it back MANUALLY via WhatsApp.`);
+
+                // Update status in DB to flag for human attention
+                await this.updateLeadStatus(chatId.replace(/\D/g, ''), 'NEEDS_EDIT');
+            }
+
             // 5. Send Response via WAHA (with Splitting and Typing Indicators)
             if (aiOutput.response) {
                 const messages = aiOutput.response.split(SPLIT).map(m => m.trim()).filter(m => m.length > 0);
 
                 // Mark message as seen first
-                await this.sendSeen(chatId);
+                await this.sendSeen(chatId, sessionToUse);
 
                 for (let i = 0; i < messages.length; i++) {
                     const msg = messages[i];
 
                     // Start typing indicator
-                    await this.startTyping(chatId);
+                    await this.startTyping(chatId, sessionToUse);
 
                     // Simulate natural typing delay (roughly 50ms per character, min 1s, max 4s)
                     const typingDelay = Math.min(Math.max(msg.length * 50, 1000), 4000);
                     await new Promise(resolve => setTimeout(resolve, typingDelay));
 
                     // Stop typing and send message
-                    await this.stopTyping(chatId);
-                    await this.sendResponse(chatId, msg, agent);
+                    await this.stopTyping(chatId, sessionToUse);
+                    await this.sendResponse(chatId, msg, agent, sessionToUse);
 
                     // Add delay between split messages
                     if (i < messages.length - 1) {
@@ -248,9 +377,9 @@ class AIHandler {
         }
     }
 
-    async sendResponse(chatId, text, agent) {
+    async sendResponse(chatId, text, agent, session) {
         const wahaApiUrl = 'http://localhost:3000/api/sendText';
-        console.log(`[AI Handler] Sending response to ${chatId}: "${text}"`);
+        console.log(`[AI Handler] Sending response to ${chatId}: "${text}" (session: ${session})`);
 
         try {
             const response = await fetch(wahaApiUrl, {
@@ -259,7 +388,7 @@ class AIHandler {
                 body: JSON.stringify({
                     chatId: chatId,
                     text: text,
-                    session: 'default'
+                    session: session
                 })
             });
 
@@ -278,14 +407,16 @@ class AIHandler {
                         .upsert({
                             chat_id: internalChatId,
                             message_id: messageData.id || `ai-${Date.now()}`,
-                            session: 'default',
+                            session: session,
                             from_jid: chatId, // For fromMe=true, this is usually the chat JID
                             from_me: true,
                             body: text,
                             type: 'text',
                             has_media: false,
                             ack: 1,
-                            message_timestamp: new Date().toISOString()
+                            message_timestamp: new Date().toISOString(),
+                            is_ai_generated: true,
+                            agent_name: agent?.name || 'AI'
                         }, { onConflict: 'message_id' });
 
                     if (saveError) {
@@ -301,12 +432,12 @@ class AIHandler {
     }
 
     // WAHA Typing Indicators
-    async startTyping(chatId) {
+    async startTyping(chatId, session) {
         try {
             await fetch('http://localhost:3000/api/startTyping', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chatId, session: 'default' })
+                body: JSON.stringify({ chatId, session })
             });
             console.log(`[AI Handler] Started typing for ${chatId}`);
         } catch (error) {
@@ -314,12 +445,12 @@ class AIHandler {
         }
     }
 
-    async stopTyping(chatId) {
+    async stopTyping(chatId, session) {
         try {
             await fetch('http://localhost:3000/api/stopTyping', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chatId, session: 'default' })
+                body: JSON.stringify({ chatId, session })
             });
             console.log(`[AI Handler] Stopped typing for ${chatId}`);
         } catch (error) {
@@ -327,12 +458,12 @@ class AIHandler {
         }
     }
 
-    async sendSeen(chatId) {
+    async sendSeen(chatId, session) {
         try {
             await fetch('http://localhost:3000/api/sendSeen', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chatId, session: 'default' })
+                body: JSON.stringify({ chatId, session })
             });
             console.log(`[AI Handler] Marked as seen: ${chatId}`);
         } catch (error) {

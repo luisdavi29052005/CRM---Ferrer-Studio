@@ -87,7 +87,36 @@ export const fetchApifyLeads = async (page = 0, pageSize = 50): Promise<ApifyLea
         url: item.url || '',
         source: item.source || 'apify',
         created_at: item.created_at || new Date().toISOString(),
-        status: item.status === true || item.status === 'true' || item.status === 'sent', // Handle boolean and string variations
+        status: item.status, // Return raw status string
+    }));
+};
+
+// Fetch ALL Apify leads without pagination (for frontend pagination)
+export const fetchAllApifyLeads = async (): Promise<ApifyLead[]> => {
+    const { data, error, count } = await supabase
+        .from('apify')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(0, 9999); // Fetch up to 10000 records
+
+    if (error) {
+        console.error('Error fetching all apify leads:', error);
+        return [];
+    }
+
+    console.log(`[fetchAllApifyLeads] Total leads: ${count}`);
+
+    return (data as DBApify[]).map(item => ({
+        id: item.id.toString(),
+        title: item.title || '',
+        phone: item.phone || '',
+        city: item.city || '',
+        state: item.state || '',
+        category: item.category || '',
+        url: item.url || '',
+        source: item.source || 'apify',
+        created_at: item.created_at || new Date().toISOString(),
+        status: item.status,
     }));
 };
 
@@ -115,7 +144,7 @@ export const deleteLeads = async (ids: string[]): Promise<void> => {
     }
 };
 
-export const updateApifyLeadStatus = async (id: string, status: boolean): Promise<void> => {
+export const updateApifyLeadStatus = async (id: string, status: boolean | string): Promise<void> => {
     const { error } = await supabase
         .from('apify')
         .update({ status })
@@ -247,20 +276,22 @@ export const fetchWahaMessages = async (chatId: string): Promise<WahaMessage[]> 
         ack: (msg.ack as any) || 0,
         mediaUrl: msg.media_url || undefined,
         mediaType: msg.type as any || undefined,
-        caption: msg.media_caption || undefined
+        caption: msg.media_caption || undefined,
+        isAiGenerated: msg.is_ai_generated || false,
+        agentName: msg.agent_name || undefined
     }));
 };
 
-export const startWahaSession = async () => {
+export const startWahaSession = async (session: string = 'default') => {
     try {
-        console.log("Attempting to start WAHA session...");
-        const response = await fetch('http://localhost:3000/api/sessions/default/start', {
+        console.log(`Attempting to start WAHA session: ${session}...`);
+        const response = await fetch(`http://localhost:3000/api/sessions/${session}/start`, {
             method: 'POST',
         });
         if (!response.ok) {
             console.error("Failed to start WAHA session:", await response.text());
         } else {
-            console.log("WAHA session start command sent.");
+            console.log(`WAHA session ${session} start command sent.`);
             // Wait a bit for the session to initialize
             await new Promise(resolve => setTimeout(resolve, 4000));
         }
@@ -269,9 +300,9 @@ export const startWahaSession = async () => {
     }
 };
 
-export const getWahaScreenshot = async (): Promise<string | null> => {
+export const getWahaScreenshot = async (session: string = 'default'): Promise<string | null> => {
     try {
-        const response = await fetch('http://localhost:3000/api/screenshot?session=default', {
+        const response = await fetch(`http://localhost:3000/api/screenshot?session=${session}`, {
             method: 'GET',
             headers: {
                 'Accept': 'image/jpeg'
@@ -288,46 +319,70 @@ export const getWahaScreenshot = async (): Promise<string | null> => {
     }
 };
 
-export const checkWahaStatus = async (): Promise<'WORKING' | 'FAILED' | 'STOPPED' | 'STARTING' | 'SCAN_QR_CODE' | 'UNKNOWN'> => {
+export const fetchSessions = async (): Promise<{ name: string, status: string }[]> => {
     try {
-        // Checking backend health instead of WAHA directly to avoid 422 if WAHA is strict
-        // Or should we check WAHA? The function name is checkWahaStatus.
-        // If we check localhost:3001/health, it confirms the BACKEND is up.
-        // But we need WAHA status.
-        // Let's try checking WAHA sessions endpoint which is more standard.
-        const response = await fetch('http://localhost:3000/api/sessions/default', {
-            method: 'GET',
-            headers: {
-                'accept': 'application/json'
-            }
-        });
+        const response = await fetch('http://localhost:3000/api/sessions');
         if (response.ok) {
             const data = await response.json();
-            return data.status || 'WORKING';
+            return Array.isArray(data) ? data : [];
         }
-        // If 404, session might not exist
-        if (response.status === 404) {
+        return [];
+    } catch (error) {
+        console.error('Error fetching sessions:', error);
+        return [];
+    }
+};
+
+export const checkWahaStatus = async (): Promise<'WORKING' | 'FAILED' | 'STOPPED' | 'STARTING' | 'SCAN_QR_CODE' | 'UNKNOWN'> => {
+    try {
+        // List all sessions and check if any is WORKING
+        const sessions = await fetchSessions();
+        if (!sessions || sessions.length === 0) {
             return 'STOPPED';
         }
-        return 'FAILED';
+        // Check for any WORKING session
+        const workingSession = sessions.find((s: any) => s.status === 'WORKING');
+        if (workingSession) return 'WORKING';
+
+        const startingSession = sessions.find((s: any) => s.status === 'STARTING');
+        if (startingSession) return 'STARTING';
+
+        const qrSession = sessions.find((s: any) => s.status === 'SCAN_QR_CODE');
+        if (qrSession) return 'SCAN_QR_CODE';
+
+        return 'STOPPED';
     } catch (e) {
         console.error("Error checking WAHA status:", e);
         return 'FAILED';
     }
 };
 
-export const checkNumberExists = async (phone: string): Promise<boolean> => {
+export const checkNumberExists = async (phone: string, session: string = 'default'): Promise<boolean> => {
     try {
         // Format phone number: remove non-digits (leave only raw numbers)
         const cleanPhone = phone.replace(/\D/g, '');
 
-
         if (!cleanPhone) return false;
 
-        // Endpoint: /api/contacts/check-exists?phone={phone}&session=default
-        // Using port 3000 (WAHA) directly? Or Backend?
-        // Backend doesn't implement check-exists. So it must be WAHA.
-        const response = await fetch(`http://localhost:3000/api/contacts/check-exists?phone=${cleanPhone}&session=default`);
+        // Get active session if session is 'default' or empty
+        let activeSession = session;
+        if (!session || session === 'default') {
+            try {
+                const sessionsRes = await fetch('http://localhost:3000/api/sessions');
+                if (sessionsRes.ok) {
+                    const sessions = await sessionsRes.json();
+                    const workingSession = sessions.find((s: any) => s.status === 'WORKING');
+                    if (workingSession) {
+                        activeSession = workingSession.name;
+                    }
+                }
+            } catch (e) {
+                console.error('Error fetching active session:', e);
+            }
+        }
+
+        // Endpoint: /api/contacts/check-exists?phone={phone}&session={session}
+        const response = await fetch(`http://localhost:3000/api/contacts/check-exists?phone=${cleanPhone}&session=${activeSession}`);
 
         if (!response.ok) {
             console.error('Error checking number existence:', response.statusText);
@@ -377,7 +432,7 @@ export const checkPaypalStatus = async (clientId: string, clientSecret: string, 
     }
 };
 
-export const fetchContactProfilePic = async (chatId: string): Promise<string | null> => {
+export const fetchContactProfilePic = async (chatId: string, session?: string): Promise<string | null> => {
     try {
         // Ensure chatId is formatted correctly (e.g. has @c.us if it's just a number)
         let formattedId = chatId;
@@ -385,8 +440,26 @@ export const fetchContactProfilePic = async (chatId: string): Promise<string | n
             formattedId = `${chatId.replace(/\D/g, '')}@c.us`;
         }
 
+        // If no session provided, try to get active session
+        let activeSession = session;
+        if (!activeSession || activeSession === 'default') {
+            try {
+                const sessionsResponse = await fetch('http://localhost:3000/api/sessions');
+                if (sessionsResponse.ok) {
+                    const sessions = await sessionsResponse.json();
+                    const workingSession = sessions.find((s: any) => s.status === 'WORKING');
+                    if (workingSession) {
+                        activeSession = workingSession.name;
+                    }
+                }
+            } catch (e) {
+                // Fallback to default
+            }
+        }
+        activeSession = activeSession || 'default';
+
         // Use port 3001 for backend proxy
-        const response = await fetch(`http://localhost:3001/api/contacts/profile-picture?contactId=${encodeURIComponent(formattedId)}&refresh=false&session=default`);
+        const response = await fetch(`http://localhost:3001/api/contacts/profile-picture?contactId=${encodeURIComponent(formattedId)}&refresh=false&session=${activeSession}`);
         if (response.ok) {
             const data = await response.json();
             return data.profilePictureURL || null;
@@ -420,9 +493,9 @@ export const formatChatId = (chatId: string) => {
     return `${numericId}@c.us`;
 };
 
-export const fetchWahaProfile = async (): Promise<{ id: string, name: string, picture: string } | null> => {
+export const fetchWahaProfile = async (session: string = 'default'): Promise<{ id: string, name: string, picture: string } | null> => {
     try {
-        const response = await fetch('http://localhost:3000/api/default/profile', {
+        const response = await fetch(`http://localhost:3000/api/${session}/profile`, {
             method: 'GET',
         });
         if (response.ok) {
@@ -435,7 +508,7 @@ export const fetchWahaProfile = async (): Promise<{ id: string, name: string, pi
     }
 };
 
-export const sendMessage = async (chatId: string, text: string, name?: string): Promise<{ success: boolean, error?: string, message?: any }> => {
+export const sendMessage = async (chatId: string, text: string, name?: string, session: string = 'default'): Promise<{ success: boolean, error?: string, message?: any }> => {
     try {
         const sendToWaha = async () => {
             // Sanitize chatId: remove non-digits, ensure @c.us suffix
@@ -447,7 +520,7 @@ export const sendMessage = async (chatId: string, text: string, name?: string): 
                 body: JSON.stringify({
                     chatId: formattedChatId,
                     text: text,
-                    session: 'default',
+                    session: session,
                     linkPreview: false
                 })
             });
@@ -555,7 +628,7 @@ export const sendMessage = async (chatId: string, text: string, name?: string): 
     };
 };
 
-export const sendImage = async (chatId: string, file: { mimetype: string, filename: string, url: string, caption?: string }) => {
+export const sendImage = async (chatId: string, file: { mimetype: string, filename: string, url: string, caption?: string }, session: string = 'default') => {
     const formattedChatId = formatChatId(chatId);
     return await fetch('http://localhost:3000/api/sendImage', {
         method: 'POST',
@@ -568,12 +641,12 @@ export const sendImage = async (chatId: string, file: { mimetype: string, filena
                 url: file.url
             },
             caption: file.caption,
-            session: 'default'
+            session: session
         })
     });
 };
 
-export const sendFile = async (chatId: string, file: { mimetype: string, filename: string, url: string, caption?: string }) => {
+export const sendFile = async (chatId: string, file: { mimetype: string, filename: string, url: string, caption?: string }, session: string = 'default') => {
     const formattedChatId = formatChatId(chatId);
     return await fetch('http://localhost:3000/api/sendFile', {
         method: 'POST',
@@ -586,12 +659,12 @@ export const sendFile = async (chatId: string, file: { mimetype: string, filenam
                 url: file.url
             },
             caption: file.caption,
-            session: 'default'
+            session: session
         })
     });
 };
 
-export const sendVoice = async (chatId: string, file: { mimetype: string, url: string }) => {
+export const sendVoice = async (chatId: string, file: { mimetype: string, url: string }, session: string = 'default') => {
     const formattedChatId = formatChatId(chatId);
     return await fetch('http://localhost:3000/api/sendVoice', {
         method: 'POST',
@@ -602,12 +675,12 @@ export const sendVoice = async (chatId: string, file: { mimetype: string, url: s
                 mimetype: file.mimetype,
                 url: file.url
             },
-            session: 'default'
+            session: session
         })
     });
 };
 
-export const sendVideo = async (chatId: string, file: { mimetype: string, filename: string, url: string, caption?: string }) => {
+export const sendVideo = async (chatId: string, file: { mimetype: string, filename: string, url: string, caption?: string }, session: string = 'default') => {
     const formattedChatId = formatChatId(chatId);
     return await fetch('http://localhost:3000/api/sendVideo', {
         method: 'POST',
@@ -620,12 +693,12 @@ export const sendVideo = async (chatId: string, file: { mimetype: string, filena
                 url: file.url
             },
             caption: file.caption,
-            session: 'default'
+            session: session
         })
     });
 };
 
-export const sendLocation = async (chatId: string, location: { latitude: number, longitude: number, title?: string }) => {
+export const sendLocation = async (chatId: string, location: { latitude: number, longitude: number, title?: string }, session: string = 'default') => {
     const formattedChatId = formatChatId(chatId);
     return await fetch('http://localhost:3000/api/sendLocation', {
         method: 'POST',
@@ -635,12 +708,12 @@ export const sendLocation = async (chatId: string, location: { latitude: number,
             latitude: location.latitude,
             longitude: location.longitude,
             title: location.title,
-            session: 'default'
+            session: session
         })
     });
 };
 
-export const sendContact = async (chatId: string, contact: { fullName: string, phoneNumber: string, organization?: string }) => {
+export const sendContact = async (chatId: string, contact: { fullName: string, phoneNumber: string, organization?: string }, session: string = 'default') => {
     const formattedChatId = formatChatId(chatId);
     return await fetch('http://localhost:3000/api/sendContactVcard', {
         method: 'POST',
@@ -654,44 +727,44 @@ export const sendContact = async (chatId: string, contact: { fullName: string, p
                     organization: contact.organization
                 }
             ],
-            session: 'default'
+            session: session
         })
     });
 };
 
 
-export const startTyping = async (chatId: string) => {
+export const startTyping = async (chatId: string, session: string = 'default') => {
     const formattedChatId = formatChatId(chatId);
     return await fetch('http://localhost:3000/api/startTyping', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             chatId: formattedChatId,
-            session: 'default'
+            session: session
         })
     });
 };
 
-export const stopTyping = async (chatId: string) => {
+export const stopTyping = async (chatId: string, session: string = 'default') => {
     const formattedChatId = formatChatId(chatId);
     return await fetch('http://localhost:3000/api/stopTyping', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             chatId: formattedChatId,
-            session: 'default'
+            session: session
         })
     });
 };
 
-export const sendReaction = async (messageId: string, emoji: string) => {
+export const sendReaction = async (messageId: string, emoji: string, session: string = 'default') => {
     return await fetch('http://localhost:3000/api/reaction', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             messageId: messageId,
             reaction: emoji,
-            session: 'default'
+            session: session
         })
     });
 };
@@ -864,6 +937,116 @@ export const deleteAgent = async (id: string): Promise<boolean> => {
 };
 
 
+// --- Social Proof Management ---
+
+export const fetchSocialProofs = async (): Promise<import('../types').SocialProofConfig[]> => {
+    const { data, error } = await supabase
+        .from('social_proofs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching social proofs:', error);
+        return [];
+    }
+
+    return (data || []).map(item => ({
+        ...item,
+        messages: item.messages || []
+    })) as import('../types').SocialProofConfig[];
+};
+
+export const createSocialProof = async (config: Omit<import('../types').SocialProofConfig, 'id' | 'created_at' | 'updated_at'>): Promise<import('../types').SocialProofConfig | null> => {
+    const { data, error } = await supabase
+        .from('social_proofs')
+        .insert([config])
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error creating social proof:', error);
+        return null;
+    }
+
+    return data as import('../types').SocialProofConfig;
+};
+
+export const updateSocialProof = async (id: string, updates: Partial<import('../types').SocialProofConfig>): Promise<import('../types').SocialProofConfig | null> => {
+    const { data, error } = await supabase
+        .from('social_proofs')
+        .update({ ...updates, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error updating social proof:', error);
+        return null;
+    }
+
+    return data as import('../types').SocialProofConfig;
+};
+
+export const deleteSocialProof = async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+        .from('social_proofs')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting social proof:', error);
+        return false;
+    }
+    return true;
+};
+
+// --- Social Proof Items (Generated Proofs) ---
+
+export const fetchSocialProofItems = async (albumId: string): Promise<import('../types').SocialProofItem[]> => {
+    const { data, error } = await supabase
+        .from('social_proof_items')
+        .select('*')
+        .eq('album_id', albumId)
+        .order('created_at', { ascending: false });
+
+    if (error) {
+        console.error('Error fetching social proof items:', error);
+        return [];
+    }
+
+    return (data || []).map(item => ({
+        ...item,
+        messages: item.messages || []
+    })) as import('../types').SocialProofItem[];
+};
+
+export const createSocialProofItem = async (item: Omit<import('../types').SocialProofItem, 'id' | 'created_at'>): Promise<import('../types').SocialProofItem | null> => {
+    const { data, error } = await supabase
+        .from('social_proof_items')
+        .insert([item])
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error creating social proof item:', error);
+        return null;
+    }
+
+    return data as import('../types').SocialProofItem;
+};
+
+export const deleteSocialProofItem = async (id: string): Promise<boolean> => {
+    const { error } = await supabase
+        .from('social_proof_items')
+        .delete()
+        .eq('id', id);
+
+    if (error) {
+        console.error('Error deleting social proof item:', error);
+        return false;
+    }
+    return true;
+};
 
 
 

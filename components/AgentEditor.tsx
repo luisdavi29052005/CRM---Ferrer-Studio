@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Save, Bot, Sparkles, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { Agent } from '../types';
 import { createAgent, updateAgent, fetchApifyCategories, uploadAgentAvatar } from '../services/supabaseService';
+import { wahaService } from '../services/wahaService';
 import { motion } from 'framer-motion';
 
 interface AgentEditorProps {
@@ -15,6 +16,7 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({ agent, onClose, onSave
     const { t } = useTranslation();
     const [loading, setLoading] = useState(false);
     const [categories, setCategories] = useState<string[]>([]);
+    const [sessions, setSessions] = useState<{ name: string, status: string }[]>([]);
     const [formData, setFormData] = useState<Partial<Agent>>({
         name: '',
         description: '',
@@ -23,7 +25,8 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({ agent, onClose, onSave
         prompt: '',
         temperature: 0.7,
         is_active: true,
-        avatar_url: ''
+        avatar_url: '',
+        session: ''
     });
 
     useEffect(() => {
@@ -36,6 +39,19 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({ agent, onClose, onSave
             }
         };
         loadCategories();
+    }, []);
+
+    // Load WAHA sessions
+    useEffect(() => {
+        const loadSessions = async () => {
+            try {
+                const sessionList = await wahaService.getSessions();
+                setSessions(sessionList.map(s => ({ name: s.name, status: s.status })));
+            } catch (e) {
+                console.error('Error loading sessions:', e);
+            }
+        };
+        loadSessions();
     }, []);
 
     useEffect(() => {
@@ -150,6 +166,24 @@ export const AgentEditor: React.FC<AgentEditorProps> = ({ agent, onClose, onSave
                                 ))}
                             </select>
                         </div>
+                    </div>
+
+                    {/* Session Selector */}
+                    <div className="space-y-2">
+                        <label className="text-xs font-medium text-zinc-500">Sessão WAHA</label>
+                        <p className="text-[10px] text-zinc-600 mb-1">Selecione em qual sessão do WhatsApp este agente vai operar</p>
+                        <select
+                            value={formData.session || ''}
+                            onChange={(e) => setFormData({ ...formData, session: e.target.value })}
+                            className="w-full bg-black/20 border border-white/10 text-zinc-200 px-4 py-2.5 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-500/50 focus:border-zinc-500/50 transition-all text-sm appearance-none hover:border-white/20"
+                        >
+                            <option value="" className="bg-zinc-900">Automático (primeira sessão ativa)</option>
+                            {sessions.map(s => (
+                                <option key={s.name} value={s.name} className="bg-zinc-900">
+                                    {s.name} {s.status === 'WORKING' ? '✓' : s.status === 'SCAN_QR_CODE' ? '📱' : '⏸'}
+                                </option>
+                            ))}
+                        </select>
                     </div>
 
                     <div className="space-y-2">

@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { AutomationFlow } from '../types';
 import { ApifyBlastPage, ApifyBlastPageHandle } from './ApifyBlastPage';
 import { Agents, AgentsHandle } from './Agents';
-import { Zap, Bot, Send, Play, Pause, Plus, List } from 'lucide-react';
+import { SocialProof, SocialProofHandle } from './SocialProof';
+import { Zap, Bot, Send, Play, Pause, Plus, List, MessageSquareHeart } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface AutomationProps {
@@ -14,9 +15,10 @@ interface AutomationProps {
 
 export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin, isLoading }) => {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<'blast' | 'agents'>('blast');
+  const [activeTab, setActiveTab] = useState<'blast' | 'agents' | 'social'>('blast');
   const blastPageRef = useRef<ApifyBlastPageHandle>(null);
   const agentsRef = useRef<AgentsHandle>(null);
+  const socialProofRef = useRef<SocialProofHandle>(null);
   const [isBlasting, setIsBlasting] = useState(false);
 
   const handleBlastClick = () => {
@@ -37,6 +39,12 @@ export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin, isLoadin
     }
   };
 
+  const handleCreateSocialProofClick = () => {
+    if (socialProofRef.current) {
+      socialProofRef.current.handleCreate();
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -45,18 +53,32 @@ export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin, isLoadin
     );
   }
 
+  const getTitle = () => {
+    switch (activeTab) {
+      case 'blast': return 'Disparo em Massa';
+      case 'agents': return 'Agentes AI';
+      case 'social': return 'Prova Social';
+    }
+  };
+
+  const getSubtitle = () => {
+    switch (activeTab) {
+      case 'blast': return 'Configure e acompanhe disparos automáticos para seus leads.';
+      case 'agents': return 'Crie e gerencie seus assistentes virtuais.';
+      case 'social': return 'Gere feedbacks automáticos estilo WhatsApp para suas redes sociais.';
+    }
+  };
+
   return (
     <div className="p-8 h-full flex flex-col overflow-hidden relative bg-[#050505]">
       {/* Header - Matches ApifyImports Header */}
       <div className="flex items-end justify-between mb-8 pb-6 border-b border-white/5">
         <div>
           <h2 className="text-3xl font-bold text-zinc-100 tracking-tight">
-            {activeTab === 'blast' ? 'Disparo em Massa' : 'Agentes AI'}
+            {getTitle()}
           </h2>
           <p className="text-zinc-500 text-sm mt-2 font-medium">
-            {activeTab === 'blast'
-              ? 'Configure e acompanhe disparos automáticos para seus leads.'
-              : 'Crie e gerencie seus assistentes virtuais.'}
+            {getSubtitle()}
           </p>
         </div>
 
@@ -82,6 +104,17 @@ export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin, isLoadin
             >
               <Bot size={12} />
               Agentes
+            </button>
+            <button
+              onClick={() => setActiveTab('social')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-200 flex items-center gap-2 ${activeTab === 'social'
+                ? 'bg-zinc-800 text-zinc-100 shadow-sm'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+                }`}
+            >
+              <MessageSquareHeart size={12} />
+              Prova Social
+              <span className="text-[9px] px-1 py-0.5 bg-emerald-500/20 text-emerald-400 rounded font-bold">BETA</span>
             </button>
           </div>
 
@@ -110,13 +143,23 @@ export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin, isLoadin
               <span>Criar Agente</span>
             </button>
           )}
+
+          {activeTab === 'social' && (
+            <button
+              onClick={handleCreateSocialProofClick}
+              className="px-4 py-2 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-white rounded-lg transition-colors text-xs font-bold uppercase tracking-wide flex items-center gap-2 shadow-lg shadow-emerald-500/20"
+            >
+              <Plus size={14} />
+              <span>Criar Prova Social</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* Content Area */}
       <div className="flex-1 overflow-hidden relative">
         <AnimatePresence mode="wait">
-          {activeTab === 'blast' ? (
+          {activeTab === 'blast' && (
             <motion.div
               key="blast"
               initial={{ opacity: 0, x: -10 }}
@@ -127,7 +170,8 @@ export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin, isLoadin
             >
               <ApifyBlastPage ref={blastPageRef} />
             </motion.div>
-          ) : (
+          )}
+          {activeTab === 'agents' && (
             <motion.div
               key="agents"
               initial={{ opacity: 0, x: 10 }}
@@ -137,6 +181,18 @@ export const Automation: React.FC<AutomationProps> = ({ flows, isAdmin, isLoadin
               className="h-full"
             >
               <Agents ref={agentsRef} />
+            </motion.div>
+          )}
+          {activeTab === 'social' && (
+            <motion.div
+              key="social"
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.2 }}
+              className="h-full"
+            >
+              <SocialProof ref={socialProofRef} />
             </motion.div>
           )}
         </AnimatePresence>

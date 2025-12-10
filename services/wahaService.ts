@@ -8,7 +8,7 @@ import { supabase } from '../supabaseClient';
 
 class WahaService {
 
-    private async saveToSupabase(chatId: string, messageData: WahaMessage, body: string, type: string) {
+    private async saveToSupabase(chatId: string, messageData: WahaMessage, body: string, type: string, session: string = 'default') {
         try {
             // 0. Resolve Chat Name from Apify
             let chatName = null;
@@ -52,7 +52,7 @@ class WahaService {
                     .upsert({
                         chat_id: chatData.id,
                         message_id: messageData.id || `manual-${Date.now()}`,
-                        session: 'default',
+                        session: session,
                         from_jid: chatId,
                         from_me: true,
                         body: body,
